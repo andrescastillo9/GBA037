@@ -1,0 +1,499 @@
+/*TMCI18N BEGIN HEADER*/
+#if !defined( tmBundle_EXISTS )
+#define TM_ON_STARTUP tmInitGlobS_szpcprg
+#include "tmcilib.h"
+static struct TMBundle tmBundle = {"szpcnva.pc",NULL,NULL,NULL,NULL};
+#define tmBundle_EXISTS
+#endif
+/*TMCI18N END HEADER*/
+
+/**************************************************************************/
+/* SZPCPRG.PC - Report of Students for time tickets		                  */
+/*                                                                        */
+/* COPYRIGHT..: Copyright 2013 Ellucian Company L.P. and its affiliates.  */
+/**************************************************************************/
+
+#include "guarpfe.h"
+
+EXEC SQL INCLUDE guaorac.c;
+
+#define OK 1
+#define NOT_OK 0 
+
+TMCHAR name[65];
+
+EXEC SQL BEGIN DECLARE SECTION;
+
+/* Standard variables */ 
+
+  static TMCHAR institution[61]={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR rptname[8]={0}/*TMCI18N CHANGED FROM ""*/;
+  static BANNUMSTR(linelimit)={0}/*TMCI18N CHANGED FROM ""*/;  
+  static TMCHAR time_var[12]={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR date[12]={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR sessionid[31]={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR temp_variable[31]={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR title_var[31]={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR abort_msg[81]={0}/*TMCI18N CHANGED FROM ""*/;  
+
+/* *** Job submission alteration  */
+  static BANNUMSTR(one_up_no)={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR conv_str[10]={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR temp_str[255]={0}/*TMCI18N CHANGED FROM ""*/;
+  static TMCHAR one_up_valid[2]={0}/*TMCI18N CHANGED FROM ""*/;
+  short int sqltrace_flag;
+  short int lineno=999;
+  short int pageno=0;
+  short int numlines=0;
+  short int rec_cnt=0;     
+
+/* Application variables  */
+  static TMCHAR tmstamp[26]={0};  
+  static int linesize = 132;      
+  static TMCHAR process_code[31]={0}; 
+  static TMCHAR start_date[12]={0};
+  static TMCHAR acad_prog_name[101]={0};
+  static TMCHAR levl_code[3]={0};
+  static TMCHAR coll_code[3]={0};
+  static TMCHAR degc_code[7]={0};
+  static TMCHAR majr_code[5]={0};
+  static TMCHAR program[13]={0};
+  static TMCHAR err_head[132]={0};
+  static TMCHAR smrprle_err[2]={0}; 
+  static TMCHAR dup_name_err[2]={0}; 
+  
+  struct err_message_table
+  { 
+    TMCHAR err_msg_code[4];
+    TMCHAR err_msg[115];
+  } err_messages[12];      
+  
+  
+ /* Shared indicator variables for SELECTs */
+  short   Ind_01;
+
+EXEC SQL END DECLARE SECTION;
+
+/* Local prototypes */       
+static void seldate(void);
+static void progopen(TMCHAR* userpass, int argc, TMCHAR* argv[]);
+static void error_message(TMCHAR *error_str);
+static int abort_process(void);
+static void get_gorrsql(void);
+static void seltitle(void);
+static void selinst(void);
+static void print_ctrl_header(void);
+static void print_control_rep(void);
+static void check_line_count(void);
+static void getsession(void);
+static void get_parameters(void);
+static void error_msg(TMCHAR *error_str);
+static void center(TMCHAR* lstr,TMCHAR* cstr,TMCHAR* rstr,int line_size);
+static void initialize_report(void);
+static int validate_one_up_num(int mode);
+static void get_job_parms(void);
+static void get_gjbprun_parm(TMCHAR parm_variable[30], TMCHAR parm_num[10]);
+static void del_parms(void);             
+static void del_prnt(void);             
+static void print_error_report(void);             
+static int get_prle_errors(int mode);
+static int get_dupl_errors(int mode);
+
+static TMCHAR TMCHARRAY_GLOB_DCL(str,255,TM_NLS_Get("0000","increase the line size"));
+
+static int debug=0; 
+
+/****************************************************************************/
+int main(int argc, TMCHAR *argv[])
+{
+  int ret_stat;
+
+  progopen(user_pass, argc, argv );
+  login();
+
+  tmprintf(&tmBundle,  TM_NLS_Get("0000", "Starting SZPDNRC.PC") ); 
+
+  rec_cnt=0;
+
+  initialize_report();
+
+  getsession();   
+
+  /*get_parameters */
+  get_parameters();
+  
+  tmfflush(tmstdout);
+
+
+  EXEC SQL EXECUTE
+    BEGIN
+          /*procedimiento a ejecutar debe contener el parametro one_up_no para la obtencion interna de la parametria*/
+             TZKLSCL.P_MAIN(:one_up_no,:sessionid);
+ 
+   END;
+  END-EXEC;
+  EXEC SQL COMMIT;  POSTORA;
+
+  print_control_rep();
+
+  del_parms(); 
+  del_prnt(); 
+  EXEC SQL COMMIT ;
+  POSTORA ;
+
+  prtmsg(CMPNORM, str2lc(rptname));
+
+  exit2os(EXIT_SUCCESS);
+  return EXIT_SUCCESS;   
+}
+
+
+/* Delete parameter table records */
+static void del_parms(void)
+{
+
+  EXEC SQL
+        DELETE FROM GJBPRUN
+        WHERE GJBPRUN_JOB = UPPER(:rptname)
+        AND   GJBPRUN_ONE_UP_NO = TO_NUMBER(:one_up_no);
+  POSTORA;
+}
+
+
+/* Delete print table records */
+static void del_prnt(void)
+{
+  EXEC SQL
+        DELETE FROM SOTPRNT
+        WHERE SOTPRNT_SESSIONID = :sessionid
+        AND SOTPRNT_JOB = 'SRRRICC';
+  POSTORA;
+}
+
+
+static void progopen(TMCHAR* userpass, int argc, TMCHAR* argv[])
+{
+   int cnt, i, next_arg;
+   TMCHAR dflt_ext[4];
+   TMCHAR* usr_outfile_name = NULL;
+   tmstrcpy(dflt_ext,_TMC("lis"));
+
+   /* Get executable name */
+   getxnam(*argv);  
+
+
+}
+
+
+static void print_error_report(void)
+{
+ if (lineno + 2 > numlines)
+  {
+    print_ctrl_header();
+    center(_TMC(""),err_head,_TMC(""),linesize);
+    tmstrcpy(temp_str, str);
+  }
+ else
+  {
+   /* Two kinds of error messages can print. Print new heading if the first type */
+   /* (smrprle) already printed and the second type (dup name) is now printing.  */
+   if ( (compare(smrprle_err,_TMC("Y"),EQS)) && (compare(dup_name_err,_TMC("Y"),EQS)) )
+    {
+     tmstrcpy(smrprle_err,_TMC("N"));
+     center(_TMC(""),err_head,_TMC(""),linesize);
+     tmstrcpy(temp_str, str);
+     lineno = lineno + 2;
+    }
+  }
+}
+
+
+static void print_control_rep(void)
+{
+  print_ctrl_header();
+  center(_TMC(""),TM_NLS_Get("0015","*** REPORT CONTROL INFORMATION - SRRRICC - Release 8.6.1 *** "),_TMC(""),linesize);
+  tmstrcpy(temp_str, str);
+}
+
+
+static void print_ctrl_header(void)
+{
+  pageno=pageno + 1;
+
+  tmsprintf(&tmBundle, conv_str, _TMC("{0,number,integer}"), pageno);
+
+  tmstrcpy(temp_str, TM_NLS_Get("0020","PAGE "));
+  tmstrcat(temp_str, conv_str);
+  center(tmstamp,institution,temp_str,linesize);
+  tmstrcpy(temp_str, str);
+
+
+  center(rptname,title_var,_TMC(""),linesize);
+  tmstrcpy(temp_str, str);
+}
+
+
+static void check_line_count(void)
+{
+
+  lineno = lineno + 3;  /* Account for blank line after each parameter line on control report */
+}
+
+
+static void center(TMCHAR* lstr,TMCHAR* cstr,TMCHAR* rstr,int line_size)
+{
+ long int padding = 0 ;
+ long int max_size= 0 ;
+ int counter = 0 ;
+
+ *str = '\0' ;
+
+ /*total len is lpadding , rpadding and total str lens*/
+ max_size = tmstrlen(lstr)+ tmstrlen(cstr)+ tmstrlen(rstr);
+
+ if(max_size <= line_size ) 
+ {
+   tmstrcpy(str,lstr);
+
+   if((line_size/2)>= (tmstrlen(lstr)+ (tmstrlen(cstr)/2)))
+   {
+    padding = ((line_size/2)- (tmstrlen(lstr)+ (tmstrlen(cstr)/2)));
+   }
+
+   for(counter=0; counter<padding; counter++)
+   {
+    tmstrcat(str,_TMC(" "));
+   }
+
+   tmstrcat(str,cstr);
+ 
+   if((line_size/2)>= ((tmstrlen(cstr)/2)+tmstrlen(rstr)))
+   {
+    padding = ((line_size/2)- ((tmstrlen(cstr)/2)+tmstrlen(rstr))) ;
+    for(counter=0; counter<padding; counter++)
+    {
+     tmstrcat(str,_TMC(" "));
+    }
+    tmstrcat(str,rstr);
+   }
+ }
+}
+
+static void initialize_report(void)
+{
+/* Initialise the standard variables */ 
+  tmstrcpy(rptname,_TMC("SZPCPRG"));
+  sysdate(time_var,ORA_NLS_TIME_FORMAT);
+  sysdate(date,ORA_NLS_DATE_FORMAT);  
+
+/* Macros which need to be executed one time per program execution */
+  seldate();
+  selinst();
+  seltitle();   
+
+}
+
+static void getsession(void)
+{
+  EXEC SQL
+        SELECT USERENV('SESSIONID')
+        INTO :sessionid
+        FROM DUAL;        
+
+  POSTORA;  
+} 
+
+/**************************************************************************/
+/*  function get_parameters determines where to get the paramaters and    */
+/*  obtains the values from the appropriate place                         */
+/**************************************************************************/
+static void get_parameters(void)
+{
+
+   input(one_up_no,TM_NLS_Get("0022","RUN SEQUENCE NUMBER: "),26,NUM);
+  /* if (*one_up_no ) 
+    {   
+     if(validate_one_up_num(FIRST_ROW))
+      {
+       get_job_parms();
+      }
+     else
+      {
+       tmstrcpy(temp_str, TM_NLS_Get("0023","Run Sequence number is invalid, aborting job"));
+       error_msg(temp_str);
+      }
+    }
+   else
+    {
+     tmstrcpy(temp_str, TM_NLS_Get("0024","Missing run sequence number, aborting job"));
+     error_msg(temp_str);
+    }*/
+}
+
+
+static int validate_one_up_num(int mode)
+{
+#ifdef SCT_DEBUG
+  tmprintf(&tmBundle, TM_NLS_Get("0025","Executing validate_one_up_num \n"));
+#endif
+
+    EXEC SQL DECLARE cursor_one_up_no CURSOR FOR
+       SELECT 'Y'
+         FROM GJBPRUN
+        WHERE GJBPRUN_JOB       = UPPER(:rptname)
+          AND GJBPRUN_ONE_UP_NO = TO_NUMBER(:one_up_no)
+          AND ROWNUM            = 1;
+
+    if ( mode == CLOSE_CURSOR ) {
+      EXEC SQL CLOSE cursor_one_up_no;
+      POSTORA;
+      return TRUE;
+    }
+
+    if (mode == FIRST_ROW ) {
+      EXEC SQL OPEN cursor_one_up_no;
+      POSTORA;
+    }
+
+    EXEC SQL FETCH cursor_one_up_no INTO
+      :one_up_valid:Ind_01;
+    POSTORA;
+
+    if(NO_ROWS_FOUND) {
+      *one_up_valid='\0';
+      EXEC SQL CLOSE cursor_one_up_no;
+      POSTORA;
+      return FALSE;
+    }
+
+   return TRUE;
+}
+
+
+/**************************************************************************/
+/* function gets the parameter values from job submission. */
+/**************************************************************************/      
+static void get_job_parms(void)
+{
+      
+   get_gjbprun_parm(process_code,_TMC("01"));
+   get_gjbprun_parm(start_date,_TMC("02"));
+   get_gjbprun_parm(linelimit,_TMC("99")); 
+ 
+   if (!*linelimit)
+   {
+   	  tmstrcpy(linelimit,_TMC("55"));
+   }
+
+   EXEC SQL 
+    SELECT TO_NUMBER(:linelimit)
+    INTO   :numlines:Ind_01
+    FROM DUAL;
+    POSTORA;
+
+   str2uc(start_date);
+}
+
+static void get_gjbprun_parm(TMCHAR parm_variable[30], TMCHAR parm_num[10]) 
+{
+   EXEC SQL
+    SELECT GJBPRUN_VALUE
+      INTO :temp_variable:Ind_01
+      FROM GJBPRUN
+     WHERE GJBPRUN_NUMBER    = :parm_num 
+       AND GJBPRUN_JOB       = UPPER(:rptname)  
+       AND GJBPRUN_ONE_UP_NO = TO_NUMBER(:one_up_no)
+       AND ROWNUM            = 1;
+   POSTORA;
+
+  tmstrcpy(parm_variable,temp_variable);
+
+  return ;
+}
+/**********************************************************/
+/* Prints the error message and aborts the program        */
+/**********************************************************/
+
+static void error_msg(TMCHAR *error_str)
+{
+#ifdef SCT_DEBUG
+  tmprintf(&tmBundle, TM_NLS_Get("0027","Executing error_msg \n"));
+#endif
+
+ tmprintf(&tmBundle, TM_NLS_Get("0028","Error: {0} \n"),error_str);
+  exit2os(EXIT_FAILURE);
+}
+
+
+static int abort_process(void)
+{  
+  tmprintf(&tmBundle, _TMC("{0}\n"),abort_msg);
+  exit2os(EXIT_FAILURE);
+  return EXIT_FAILURE;
+}
+
+/**************************************************************************/
+/**************************************************************************/
+   /* Prints the error message and aborts the program  */
+ static void error_message(TMCHAR *error_str) {
+   tmprintf(&tmBundle, TM_NLS_Get("0029","*ERROR* {0}\n"), error_str);
+   exit2os(EXIT_FAILURE);
+ } 
+
+/************************************************************************/
+/*              Selects the Institution Name.                           */
+/************************************************************************/
+static void selinst(void)
+{
+ EXEC SQL SELECT GUBINST_NAME
+      INTO  :institution:Ind_01
+      FROM  GUBINST;
+
+  if (NO_ROWS_FOUND)
+     {
+        tmstrcpy(institution, TM_NLS_Get("0030","NO INSTITUTION NAME"));
+     }
+}
+/************************************************************************/
+/* Get title of report from report table                                */
+/************************************************************************/
+
+static void seltitle(void)
+{
+  EXEC SQL SELECT GJBJOBS_TITLE
+      INTO  :title_var:Ind_01
+      FROM GJBJOBS
+      WHERE GJBJOBS_NAME = UPPER(:rptname);
+
+  if ( NO_ROWS_FOUND )
+    {
+      *title_var='\0';
+    }
+}
+ 
+
+static void seldate(void)
+{
+  EXEC SQL SELECT TO_CHAR(SYSDATE,G$_DATE.GET_NLS_DATE_FORMAT) || ' ' || TO_CHAR(SYSDATE,'HH24:MI:SS')
+      INTO  :tmstamp:Ind_01
+      FROM DUAL;
+
+  if ( NO_ROWS_FOUND )
+    {
+      *tmstamp='\0';
+    }
+}
+
+
+/*TMCI18N BEGIN GLOBAL STRING INITIALIZATION*/
+#ifndef ORA_PROC
+void tmInitGlobS_szpcprg(void)
+{
+	TMCHARRAY_GLOB_INIT(str);
+
+	#ifdef _DEBUG
+	puts("*** Initialization tmInitGlobS_SZPCPRG OK ***\n");
+	#endif
+}
+#endif /* not defined ORA_PROC*/
+/*TMCI18N END GLOBAL STRING INITIALIZATION*/
