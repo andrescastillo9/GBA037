@@ -13,3 +13,5 @@
 @07_TZKPRFA0.sql
 --actualizar package BZSKOACC
 @08_BZSKOACC.sql
+--actualizar def y body TZKPUFC CON BANINST1
+@09_TZKPUFC.sql
