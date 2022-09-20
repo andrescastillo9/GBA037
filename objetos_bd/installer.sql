@@ -5,8 +5,8 @@
 --Configurar mduu con BANSECR o BANINST1
 @03_MDUUGBA037configuracion.sql
 --Compilar 04_szpdnrc.pc
---dar de alta szpdnrc
-@05_alta_szpdnrc.sql con BANSECR
+--dar de alta szpdnrc con BANSECR
+@05_alta_szpdnrc.sql 
 --configurar mduu de anulacion prefacturas con BANSECR
 @06_MDUU001_configuracion.sql
 --instalar package TZKPRFA0 BANINST1
