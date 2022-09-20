@@ -1,4 +1,4 @@
-CREATE OR REPLACE PACKAGE BZSKOACC AS
+CREATE OR REPLACE PACKAGE BANINST1.BZSKOACC AS
 /******************************************************************************
    NAME:       BZSKOACC
    PURPOSE: NEORIS
@@ -43,7 +43,7 @@ END BZSKOACC;
 /
 
 
-CREATE OR REPLACE PACKAGE BODY            "BZSKOACC" 
+CREATE OR REPLACE PACKAGE BODY            BANINST1."BZSKOACC" 
 IS
     /******************************************************************************
        NAME:       BZSKOACC
