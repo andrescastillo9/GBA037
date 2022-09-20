@@ -11,3 +11,5 @@
 @06_MDUU001_configuracion.sql
 --instalar package TZKPRFA0 BANINST1
 @07_TZKPRFA0.sql
+--actualizar package BZSKOACC
+@08_BZSKOACC.sql
