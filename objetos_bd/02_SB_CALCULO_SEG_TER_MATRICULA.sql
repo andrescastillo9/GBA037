@@ -1,4 +1,4 @@
-CREATE OR REPLACE PACKAGE            BANINST1."SB_CALCULO_SEG_TER_MATRICULA" is
+CREATE OR REPLACE PACKAGE            "SB_CALCULO_SEG_TER_MATRICULA" is
 
 
 function f_majr_code(p_pidm number,v_sp number) return
@@ -284,7 +284,7 @@ end sb_calculo_seg_ter_Matricula;
 /
 
 
-CREATE OR REPLACE PACKAGE BODY            BANINST1."SB_CALCULO_SEG_TER_MATRICULA" IS
+CREATE OR REPLACE PACKAGE BODY            "SB_CALCULO_SEG_TER_MATRICULA" IS
   v_study_path number;
 
   function f_majr_code(p_pidm number, v_sp number) return varchar2 is

@@ -1,4 +1,4 @@
-CREATE OR REPLACE PACKAGE BANINST1.BZSKOACC AS
+CREATE OR REPLACE PACKAGE BZSKOACC AS
 /******************************************************************************
    NAME:       BZSKOACC
    PURPOSE: NEORIS
@@ -40,10 +40,11 @@ CREATE OR REPLACE PACKAGE BANINST1.BZSKOACC AS
   PROCEDURE p_view_history;
 
 END BZSKOACC;
+
 /
 
 
-CREATE OR REPLACE PACKAGE BODY            BANINST1."BZSKOACC" 
+CREATE OR REPLACE PACKAGE BODY          "BZSKOACC"
 IS
     /******************************************************************************
        NAME:       BZSKOACC
@@ -376,7 +377,8 @@ v_now DATE;
         twbkfrmt.p_paragraph (1);
         twbkwbis.p_dispinfo ('bzskoacc.P_ViewAcct_Alt', 'DEFAULT');
 
-    htp.p('<span style="font-weight:bold; color:red; font-size:150%">Una vez generada la prefactura,  no es posible realizar cambios en su inscripción de asignaturas.</span>');
+    htp.p('<span style="font-weight:bold; color:red; font-size:150%">Una vez generada la prefactura,  no es posible realizar cambios en su inscripción de asignaturas <br> </span>');
+    htp.p('<span style="font-weight:bold; color:red; font-size:150%">Para poder ver reflejado los valores de becas, se debe dar clic en el botón “GENERAR PREFACTURA”</span>');
 
     -- TERMINOS Y CONDICIONES
     htp.p('
@@ -668,6 +670,7 @@ function myFunction( form ) {
     END;
 
 END BZSKOACC;
+
 
 
 

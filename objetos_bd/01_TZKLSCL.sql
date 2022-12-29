@@ -1,4 +1,4 @@
-CREATE OR REPLACE PACKAGE            BANINST1."TZKLSCL" is
+CREATE OR REPLACE PACKAGE                     "TZKLSCL" is
 
   -- Author  : MARIO
   -- Created : 7/01/2020 8:45:11 a. m.
@@ -26,7 +26,7 @@ FUNCTION f_obtener_tipo_alumno( p_term varchar2,
     p_pay_date date
   ) return varchar;
 
- PROCEDURE p_Aplica_MDUU_BENEFICIOS (p_term number);
+ PROCEDURE p_Aplica_MDUU_BENEFICIOS (p_term number, p_id_student varchar2);
  function f_debe_pidm_accd (
     p_pidm number, 
     p_term varchar2	
@@ -91,10 +91,11 @@ end TZKLSCL;
 
 
 
+
 /
 
 
-CREATE OR REPLACE PACKAGE BODY            BANINST1."TZKLSCL" is
+CREATE OR REPLACE PACKAGE BODY                     "TZKLSCL" is
 
   -- Author  : MARIO
   -- Created : 7/01/2020 8:45:11 a. m.
@@ -539,7 +540,7 @@ end;
   end;
 
 
-  PROCEDURE p_Aplica_MDUU_BENEFICIOS (p_term number) is
+  PROCEDURE p_Aplica_MDUU_BENEFICIOS (p_term number, p_id_student varchar2) is
 --
 -- FILE NAME..: p_Aplica_MDUU_CAMBIO_BENEFICIOS.sql
 -- RELEASE....:
@@ -575,7 +576,9 @@ BEGIN
 
     FOR ret_reg IN get_ret_code_c LOOP
 
-        v_param_str :='P1102_AIDP_CODE_SRC|'||ret_reg.aidp||'|P1101_AIDY_CODE_SRC|'||ret_reg.aidy||'';
+        --v_param_str :='P1102_AIDP_CODE_SRC|'||ret_reg.aidp||'|P1101_AIDY_CODE_SRC|'||ret_reg.aidy||'';
+        v_param_str :='P1101_ID|'||p_id_student||'|P1102_AIDP_CODE_SRC|'||ret_reg.aidp||'|P1101_AIDY_CODE_SRC|'||ret_reg.aidy||'';
+				tzkpufc.p_ins_tzrrlog(0,  'MDUU_CAMBIO_BENEFICIOS', 'v_param_str ', v_param_str, user);
 
         gkkpsql.api_executeruleset(pprocess => 'MDUU_CAMBIO_BENEFICIOS',
                                       pruleset => 'MDUU_CAMBIO_BENEFICIOS',
@@ -1871,7 +1874,11 @@ procedure p_execute_lc (p_seq_no        number default 999999999,
 
 						-- Ejecucion de mduu de cambio de status de becas para el periodo
 						BEGIN      
-							 p_Aplica_MDUU_BENEFICIOS(p_term => p_term);
+              p_insert_log_bit(id        =>p_seq_no,
+								   v_paso    => v_pro,
+								   v_desc    => 'Ejecuta p_Aplica_MDUU_BENEFICIOS pada ID :'||gb_common.f_get_id(rec_data.sfrstcr_pidm),
+								   v_sqlerrm => sqlerrm);
+							 p_Aplica_MDUU_BENEFICIOS(p_term => p_term, p_id_student => gb_common.f_get_id(rec_data.sfrstcr_pidm));
 							 COMMIT;                     
 						end;
 						-- Desaplicacion y aplicación de pagos por pidm y periodo
@@ -3412,6 +3419,7 @@ PROCEDURE p_main (p_one_up_no IN NUMBER, p_user_id IN VARCHAR2)
     WPG_DOCLOAD.download_file(l_xls);  
   end;
 end TZKLSCL;
+
 
 
 

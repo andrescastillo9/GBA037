@@ -1,4 +1,4 @@
-CREATE OR REPLACE PACKAGE            BANINST1."TZKPRFA" AS
+CREATE OR REPLACE PACKAGE            "TZKPRFA" AS
   -- Function and procedure implementations
 
   /**********************************************************************/
@@ -16,7 +16,7 @@ end TZKPRFA;
 /
 
 
-CREATE OR REPLACE PACKAGE BODY           BANINST1."TZKPRFA" is
+CREATE OR REPLACE PACKAGE BODY            "TZKPRFA" is
   -- Function and procedure implementations
   
 FUNCTION F_ValidateValue( a_Value    IN VARCHAR2,
@@ -190,4 +190,3 @@ end TZKPRFA;
 
 
 /
- create synonym "PUBLIC".TZKPRFA for "TZKPRFA";

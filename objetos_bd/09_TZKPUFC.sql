@@ -1,5 +1,4 @@
-SET DEFINE OFF;
-CREATE OR REPLACE PACKAGE            BANINST1."TZKPUFC" 
+CREATE OR REPLACE PACKAGE            "TZKPUFC" 
 AS
 --
 -- FILE NAME..: tzkpufc.sql
@@ -116,9 +115,9 @@ AS
 -- p_pay_hall_ns.- Hall de pagos para estudiantes con opciones de búsqueda por ID, Cédula y Prefactura a pagar. Sin firma en autoservicios de Banner.
 --
 -- p_show_pdf.- Procedimiento de despliegue de PDF de prefacturas.
-
----- p_show_pdf_solicitudes - Procedimiento para despliegue de pdf y envio de correo de prefacturas de solicitudes financieras
-
+--
+-- p_show_pdf_solicitudes - Procedimiento para despliegue de pdf y envio de correo de prefacturas de solicitudes financieras
+--
 -- p_awards_courses.- Proceso de calculo de Becas (aumento y disminución) del Estudiante que será sembrado en el estado de cuenta previo a generacion de prefactura.
 --
 -- p_ins_tzrrlog.- Procedimiento general para almacenar información tipo Log de la ejecución de los procesos de generacion de documentos de venta,
@@ -367,8 +366,9 @@ FUNCTION f_get_doc_number_r (p_pidm         NUMBER,
 
 
     PROCEDURE p_show_pdf (p_pidm IN NUMBER, p_doc_number IN NUMBER, p_send_mail in varchar2 default 'N', p_web  in varchar2 default null, p_footer in varchar2 default null); 
+
 --Neoris hermes.navarro
---PROCEDURE p_show_pdf_solicitudes (p_pidm IN NUMBER, p_doc_number IN NUMBER, p_send_mail in varchar2 default 'N', p_web  in varchar2 default null, p_cod_sol IN NUMBER,p_footer in varchar2 default null);
+PROCEDURE p_show_pdf_solicitudes (p_pidm IN NUMBER, p_doc_number IN NUMBER, p_send_mail in varchar2 default 'N', p_web  in varchar2 default null, p_cod_sol IN NUMBER,p_footer in varchar2 default null);
 --Neoris hermes.navarro
  procedure  p_credit_note (p_pidm IN NUMBER, p_sri_doc_number IN varchar2, p_user_id IN varchar2 default null, p_reason IN varchar2 default null, p_cuenta_puente_ind IN varchar2 default null,  p_return OUT varchar2);
 
@@ -454,6 +454,21 @@ procedure p_ins_tzrrlog (
  p_user_id varchar2 default null
  );
 
+procedure p_ins_tzfclog ( 
+ P_SDOC_CODE TZFCLOG.TZFCLOG_SDOC_CODE%TYPE,
+ P_USER TZFCLOG.TZFCLOG_USER%TYPE,
+ P_CAMP_CODE TZFCLOG.TZFCLOG_CAMP_CODE%TYPE,
+ P_PREFIX1 TZFCLOG.TZFCLOG_PREFIX1%TYPE,
+ P_PREFIX2 TZFCLOG.TZFCLOG_PREFIX2%TYPE,
+ P_NEXT_NUM_DOC TZFCLOG.TZFCLOG_NEXT_NUM_DOC%TYPE,
+ P_CAMP_DISTRICT TZFCLOG.TZFCLOG_CAMP_DISTRICT%TYPE,
+ P_SEQ TZFCLOG.TZFCLOG_SEQ%TYPE,
+ P_ERROMSG TZFCLOG.TZFCLOG_ERROMSG%TYPE,
+ P_PROCESS TZFCLOG.TZFCLOG_PROCESS%TYPE,
+ P_REFERENCE TZFCLOG.TZFCLOG_REFERENCE%TYPE,
+ P_LOG TZFCLOG.TZFCLOG_LOG%TYPE
+ );
+
 function f_is_comprobante (p_pay_detail_code varchar2) return varchar2;
 
 procedure p_gen_comprobante_pago (p_pidm number, p_sri_doc_number varchar2 default null, p_user varchar2 default null, p_return out varchar2);
@@ -508,7 +523,7 @@ END tzkpufc;
 /
 
 
-CREATE OR REPLACE PACKAGE BODY            BANINST1."TZKPUFC" 
+CREATE OR REPLACE PACKAGE BODY            "TZKPUFC" 
 IS
 --
 -- FILE NAME..: tzkpufc.sql
@@ -548,8 +563,10 @@ IS
     p_obs_dflt      VARCHAR2 (100);
     p_camp_x        VARCHAR2 (100);
     p_interna   VARCHAR2(3);
+
     p_camp_pref VARCHAR2 (100);
     p_term_pref VARCHAR2 (100);
+
 p_fecha_vigencia_valida varchar2(1);
 p_sdoc_code_val varchar2(10);
 
@@ -564,8 +581,10 @@ select  case when trunc(TZRDPRF_DUE_DOC_DATE) >= trunc(sysdate) THEN
         end fecha_valida
 from tzrdprf where 
 --TZRDPRF_PIDM = p_pidm 
-tzrdprf_doc_number = p_doc_number
+ tzrdprf_doc_number = p_doc_number
 and TZRDPRF_DOC_STATUS = 'CREADO';
+
+--
 v_get_borrado varchar2(1);
 v_get_desc_borr varchar2(30);
 
@@ -583,6 +602,7 @@ cursor c_get_borrado (p_term varchar2, p_camp varchar2) is
     and GTVSDAX_INTERNAL_CODE = 'TERM_BORRA'
     and GTVSDAX_CONCEPT = p_camp
     and GTVSDAX_TRANSLATION_CODE = 'Y';
+
 -- Obtiene el CRN del estado de cuenta por el numero de transacción.
 cursor c_get_crn (p_pidm number, p_trans varchar2 ) is 
 select TBRACCD_CRN
@@ -904,8 +924,9 @@ CURSOR c_get_credentials (
 
         p_valida_exist := f_get_acum_str (p_pidm || p_exist_trans);
 
+        p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'f_get_doc_number', 'f_doc_num_pagado_dprf'||f_doc_num_pagado_dprf(p_pidm, p_sdoc_code_e, p_doc_number), user);
 
-        IF p_valida_acum = p_valida_exist AND
+        IF p_valida_acum = p_valida_exist AND 
 				f_doc_num_pagado_dprf(p_pidm, p_sdoc_code_e, p_doc_number) = 'Y'
         THEN
             RETURN p_doc_number;
@@ -1426,6 +1447,7 @@ p_program   := f_get_sovlcur(global_pidm,p_term_code, 'PROGRAM' );
                 open c_get_borrado (p_term_pref, p_camp_pref);
                 fetch c_get_borrado into v_get_borrado, v_get_desc_borr;
                 close c_get_borrado;
+
                 IF nvl(p_fecha_vigencia_valida,'N') = 'N' THEN
                     p_status := 'VENCIDO';
                 END IF;
@@ -1444,7 +1466,7 @@ p_program   := f_get_sovlcur(global_pidm,p_term_code, 'PROGRAM' );
                     twbkfrmt.p_tabledata(' Prefactura Vencida');
                     ELSIF p_status = 'SUSPENDED' then
                     twbkfrmt.p_tabledata(v_get_desc_borr);
-                    ELSIF p_status = 'KUSHKI' then
+					ELSIF p_status = 'KUSHKI' then
                     twbkfrmt.p_tabledata('Opción disponible en 10 minutos');
                     ELSE 
                     twbkfrmt.p_tabledata('Referencia:' || p_reference ||' Estatus:'||p_status||'. '||p_message);
@@ -1613,6 +1635,13 @@ cursor c_get_sdoc_code_tzvaccd (p_pidm number,  p_trans varchar2 ) is
             v_prefix_1 := SUBSTR (p_term_code, 1, 4);
             v_prefix_2 := SUBSTR (p_term_code, 5, 4);
 
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'INS_TZRFACT', 'p_sdoc_code '|| p_sdoc_code , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'INS_TZRFACT', 'p_user_id '|| p_user_id , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'INS_TZRFACT', 'p_campus '|| p_campus , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'INS_TZRFACT', 'v_prefix_1 '|| v_prefix_1 , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'INS_TZRFACT', 'p_sdoc_code '|| v_prefix_2 , user);
+
+
             tzkpufc.p_get_next_folio (p_doctype         => p_sdoc_code, 
                                       p_user            => p_user_id, 
                                       p_camp_code       => p_campus,
@@ -1623,6 +1652,15 @@ cursor c_get_sdoc_code_tzvaccd (p_pidm number,  p_trans varchar2 ) is
                                       p_errormsg        => v_error,
                                       p_camp_district   => v_district); 
 
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'p_sdoc_code '|| p_sdoc_code , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'p_user_id '|| p_user_id , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'p_campus '|| p_campus , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'v_prefix_1 '|| v_prefix_1 , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'v_prefix_2 '|| v_prefix_2 , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'v_doc_num '|| v_doc_num , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'v_seq '|| v_seq , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'v_error '|| v_error , user);
+            p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'p_get_next_folio', 'v_district '|| v_district , user);            
 
             IF v_error IS NOT NULL
             THEN
@@ -2152,6 +2190,7 @@ cursor c_get_sdoc_code_tzvaccd (p_pidm number,  p_trans varchar2 ) is
         and TBRACCD_BALANCE > 0;
 
 	v_disminucion_beca varchar2(1):='N';
+
     BEGIN
 
         OPEN c_get_data_i ('PUCE_FACT', 'COD_PREF', 'EXT');
@@ -2173,7 +2212,7 @@ cursor c_get_sdoc_code_tzvaccd (p_pidm number,  p_trans varchar2 ) is
        fetch c_get_crn into v_crn;
        close c_get_crn;
 
-
+---		   
          p_fecha_vigencia_valida :=  TZKPUFC.f_get_valid_document(p_pidm, p_term_code, p_site_code, nvl(p_sdoc_code,p_sdoc_pref), v_crn);
 
         IF p_fecha_vigencia_valida = 'Y' then
@@ -2271,7 +2310,7 @@ cursor c_get_sdoc_code_tzvaccd (p_pidm number,  p_trans varchar2 ) is
 
 				return;
 			end if;
-			----------------        
+			----------------
         END IF;
     EXCEPTION
         WHEN OTHERS
@@ -2373,6 +2412,12 @@ p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'BECAS', 'v_disminucion_beca: '||v_d
                 p_chg_tran_number   => rec.tbrappl_chg_tran_number,
                 p_amount            => rec.tbrappl_amount,
                 p_appl_rowid        => rec.tbrappl_rowid);
+
+		p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'BECAS', 'rec.tbrappl_pay_tran_number: '||rec.tbrappl_pay_tran_number, user);
+		p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'BECAS', 'rec.tbrappl_chg_tran_number: '||rec.tbrappl_chg_tran_number, user);
+		p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'BECAS', 'rec.tbrappl_amount: '||rec.tbrappl_amount, user);
+		p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'BECAS', 'rec.tbrappl_rowid: '||rec.tbrappl_rowid, user);
+
         END LOOP;
 
   end if;
@@ -2384,7 +2429,7 @@ p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'BECAS', 'v_disminucion_beca: '||v_d
             IF v_pago_x_aplicar = 'Y' then
 
             BEGIN 
-
+			p_ins_tzrrlog(p_pidm,  'GENERA_PREFACTURA', 'BECAS', 'v_pago_x_aplicar -: '||v_pago_x_aplicar, user);
             p_aplicatvrappl (p_id            => gb_common.f_get_id (p_pidm),
                              p_update_mode   => 'U',
                              output          => lv_out_stat);
@@ -2909,6 +2954,11 @@ p_ins_tzrrlog(v_pidm,  'GENERA_PREFACTURA_MASIVO', 'P_GEN_DOCUMENTS', 'v_term_co
                 FETCH c_get_moneda INTO v_moneda;
                 CLOSE c_get_moneda;
 
+                p_ins_tzrrlog(x.tzvaccd_pidm,  'GENERA_PREFACTURA_MASIVO', 'x.tzvaccd_pidm', x.tzvaccd_pidm, user);
+                p_ins_tzrrlog(x.tzvaccd_pidm,  'GENERA_PREFACTURA_MASIVO', 'x.tzvaccd_term_code', x.tzvaccd_term_code, user);
+                p_ins_tzrrlog(x.tzvaccd_pidm,  'GENERA_PREFACTURA_MASIVO', 'x.TZVACCD_CAMPUS', x.TZVACCD_CAMPUS, user);
+                p_ins_tzrrlog(x.tzvaccd_pidm,  'GENERA_PREFACTURA_MASIVO', 'tzvaccd_sdoc_code', x.tzvaccd_sdoc_code, user);
+                p_ins_tzrrlog(x.tzvaccd_pidm,  'GENERA_PREFACTURA_MASIVO', 'x.tzvaccd_crn', x.tzvaccd_crn, user);
 
                 v_create_doc :=
                     f_get_valid_document (x.tzvaccd_pidm,
@@ -2917,6 +2967,7 @@ p_ins_tzrrlog(v_pidm,  'GENERA_PREFACTURA_MASIVO', 'P_GEN_DOCUMENTS', 'v_term_co
                                           x.tzvaccd_sdoc_code,
                                           x.tzvaccd_crn);
 
+                p_ins_tzrrlog(x.tzvaccd_pidm,  'GENERA_PREFACTURA_MASIVO', 'v_create_doc', v_create_doc, user);
 
                 IF v_create_doc = 'Y'
                 THEN
@@ -4418,6 +4469,8 @@ BEGIN
 
         END;
 
+        p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P conec wallet:', ' SQLERRM: ' ||SUBSTR (SQLERRM, 1, 700) ||' sysdate:'||sysdate, user);
+
 
         OPEN c_get_data_i ('PUCE_FACT', 'WALLET_DIR', 'COM');
         FETCH c_get_data_i INTO p_oracle_wallet_path;
@@ -4430,6 +4483,10 @@ BEGIN
        begin 
         UTL_HTTP.set_wallet ( p_oracle_wallet_path, p_oracle_wallet_pass);
 
+
+        p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P Guarda Respuesta:', ' p_oracle_wallet_path: ' ||p_oracle_wallet_path ||' sysdate:'||sysdate, user);
+        p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P Guarda Respuesta:', ' p_oracle_wallet_pass: ' ||p_oracle_wallet_pass ||' sysdate:'||sysdate, user);
+        p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P Guarda Respuesta:', ' p_endpoint: ' ||p_endpoint ||' sysdate:'||sysdate, user);
 
         req := UTL_HTTP.begin_request (p_endpoint, 'POST', ' HTTP/1.1');      
         UTL_HTTP.set_header (req, 'content-type', 'application/json');
@@ -4444,9 +4501,13 @@ BEGIN
 
             p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P', 'EXCEPTION : ' ||SQLCODE || '--' || SUBSTR (SQLERRM, 1, 700), user);
         end;
+
         SELECT json_value (buffer, '$.status.status')
          INTO lv_status
          FROM DUAL;
+            p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P', 'lv_status : ' ||lv_status || '--' || SUBSTR (SQLERRM, 1, 700), user);
+            --p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P', 'res       : ' ||res       || '--' || SUBSTR (SQLERRM, 1, 700), user);
+            p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P', 'buffer : ' ||buffer || '--' || SUBSTR (SQLERRM, 1, 700), user);
 
 
         IF lv_status = 'OK' THEN  
@@ -4507,8 +4568,8 @@ BEGIN
             'window.location.href ="' || v_return_url || '";',
             'Javascript');
 		ELSE
-            p_ins_tzrrlog(p_pidm,  'PagoOnLine', 'P2P Guarda Respuesta lv_status<>ok:', lv_status ||' lc_status: ' ||lc_status ||' lc_reason: '||lc_reason ||' sysdate:'||sysdate, user);
-            p_ins_tzrrlog(p_pidm,  'PagoOnLine', 'P2P Guarda Respuesta lv_status<>ok:', lc_reason ||' lc_reason: ' ||lc_reason ||' sysdate:'||sysdate, user);
+            p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P Guarda Respuesta lv_status<>ok:', lv_status ||' lc_status: ' ||lc_status ||' lc_reason: '||lc_reason ||' sysdate:'||sysdate, user);
+            p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P Guarda Respuesta lv_status<>ok:', lc_reason ||' lc_reason: ' ||lc_reason ||' sysdate:'||sysdate, user);
 
          END IF;
 
@@ -4578,10 +4639,13 @@ BEGIN
             insert into tzrpayu (tzrpayu_pidm_oprd, tzrpayu_pidm, tzrpayu_sdoc_code, tzrpayu_doc_number, tzrpayu_campus, tzrpayu_term,TZRPAYU_REFERENCE, tzrpayu_send_json, tzrpayu_activity_date, tzrpayu_user_id, tzrpayu_data_origin, tzrpayu_pay_date, tzrpayu_servicio, tzrpayu_status)
             values (p_pidm_oprd, p_pidm, p_sdoc_code,p_doc_number, p_sede, p_term,v_reference, p_request, sysdate, user, 'TZKPUFC', sysdate, p_servicio, 'KUSHKI');
             gb_common.p_commit;
-             exception when others then
+            --exception when others then null;
+
+               exception when others then
          p_error_msg := 'Error: ' || SQLCODE || '--' || SUBSTR (SQLERRM, 1, 700);
 
         p_ins_tzrrlog(p_pidm,  'PAGO_ONLINE', 'P2P', 'EXCEPTION : ' ||SQLCODE || '--' || SUBSTR (SQLERRM, 1, 700), user);
+
             end;
         END IF;    
 
@@ -5087,7 +5151,8 @@ end;
                    AND tvrsdsq_prefix_1 = NVL (p_prefix1, tvrsdsq_prefix_1)
                    AND tvrsdsq_prefix_2 = NVL (p_prefix2, tvrsdsq_prefix_2)
                    AND tvrsdsq_camp_code =
-                       NVL (p_camp_code, tvrsdsq_camp_code);
+                       NVL (p_camp_code, tvrsdsq_camp_code);                       
+
     BEGIN
 
           p_ins_tzrrlog(0,  'COMPROBANTE', 'p_gen_comprobante_pago netx folio: ', ' p_doctype ' ||p_doctype,user);
@@ -5184,7 +5249,8 @@ end;
         p_error          OUT VARCHAR2)
     IS PRAGMA autonomous_transaction;
     BEGIN
-	--DBMS_LOCK.Sleep(1);    
+	--DBMS_LOCK.Sleep(1);   
+    gb_common.p_commit;
         UPDATE tvrsdsq
            SET tvrsdsq_max_seq = p_secuencia,
                TVRSDSQ_ACTIVITY_DATE = SYSDATE,
@@ -5276,24 +5342,37 @@ begin
 
 v_program := tzkpufc.f_get_sovlcur(p_pidm, p_term, 'PROGRAM' );
 v_levl := tzkpufc.f_get_sovlcur(p_pidm, p_term, 'LEVL' );
+dbms_output.put_line ('p_term: ' || p_term);
 
+dbms_output.put_line ('PROGRAMS: ' || v_program);
+dbms_output.put_line ('LEVL: ' || v_levl);
 open c_get_chrt;
 fetch c_get_chrt into v_chrt;
 close c_get_chrt;
+dbms_output.put_line ('v_chrt: ' || v_chrt);
 
 
 for i in c_regs loop
+
+dbms_output.put_line ('i.TZRFVEN_PROGRAM_CODE: ' || i.TZRFVEN_PROGRAM_CODE);
+dbms_output.put_line ('i.TZRFVEN_LEVL_CODE: ' || i.TZRFVEN_LEVL_CODE);
+dbms_output.put_line ('i.TZRFVEN_CHRT_CODE ' || i.TZRFVEN_CHRT_CODE);
+dbms_output.put_line ('i.TZRFVEN_CRN ' || i.TZRFVEN_CRN);
 
 
 if i.TZRFVEN_PROGRAM_CODE is null and i.TZRFVEN_LEVL_CODE is null and i.TZRFVEN_CHRT_CODE is null and i.TZRFVEN_CRN is null  then
   j := 1;
   fecha_fin := to_char(i.tzrfven_end_date, 'DD/MON/YYYY');
+dbms_output.put_line ('i.tzrfven_start_date ' || i.tzrfven_start_date);
+
+dbms_output.put_line ('fecha_fin ' || fecha_fin);
 
   if trunc(sysdate) between trunc(i.tzrfven_start_date) and  trunc(i.tzrfven_end_date) then
         p_valid_1 :=  'Y';
    else
         p_valid_1 := 'N';     
    end if;
+dbms_output.put_line ('p_valid_1 ' || p_valid_1);
 
 
 elsif  i.TZRFVEN_PROGRAM_CODE = v_program then 
@@ -5313,22 +5392,39 @@ elsif i.TZRFVEN_LEVL_CODE = v_levl then
 
  end if;
 
+dbms_output.put_line ('K ' || k);
+dbms_output.put_line ('v_ant 0 ' || v_ant);
+
 v_ant := v_ant +  k;
 
+dbms_output.put_line ('v_ant 1 ' || v_ant);
+dbms_output.put_line ('v_last 1 ' || v_last);
 
 if v_ant > v_last then
    v_last := v_ant;
+      dbms_output.put_line ('i.tzrfven_start_date ' || trunc(i.tzrfven_start_date));
+      dbms_output.put_line ('i.tzrfven_end_date ' || trunc(i.tzrfven_end_date));      
+      dbms_output.put_line ('trunc(sysdate) ' || trunc(sysdate));      
+
    if trunc(sysdate) between trunc(i.tzrfven_start_date) and  trunc(i.tzrfven_end_date) then
-        v_valid := 'Y' ;     
+        v_valid := 'Y' ;  
+        dbms_output.put_line ('v_last v_ant > v_last--- ' || v_valid);
+
    else
         v_valid := 'N';     
    end if;
+   dbms_output.put_line ('v_last v_ant > v_last ' || v_valid);
+
 end if;
 
 
 v_ant := 0;
 k := 0;
 end loop;
+
+dbms_output.put_line ('v_valid ' || v_valid);
+dbms_output.put_line ('v_ant ' || v_ant);
+dbms_output.put_line ('j ' || j);
 
 IF v_last = 0 and j = 0 then
      v_valid := 'N';     
@@ -5337,6 +5433,8 @@ elsif v_last = 0 and j > 0 then
      v_valid := p_valid_1;     
 
 end if;
+dbms_output.put_line ('v_valid ' || v_valid);
+
 
 
 return v_valid;
@@ -5997,12 +6095,15 @@ and pr.SGRCHRT_CHRT_CODE is not null;
         CURSOR c_emal_code
         IS
             SELECT gtvsdax_external_code,
+                    --acastillo caso correo por sede
+                    --tzkpufc.f_get_sde_val('STVCAMP', 'CORREO_SEDE_PREF', p_sede) gtvsdax_desc,
                    gtvsdax_desc,
                    gtvsdax_concept,
                    gtvsdax_comments
               FROM gtvsdax
              WHERE     gtvsdax_internal_code_group = 'PUCE_FACT'
-                   AND gtvsdax_internal_code = 'EMAL_CODE';
+                   AND gtvsdax_internal_code = 'EMAL_SEDE'
+                   AND gtvsdax_translation_code = p_sede;
 
         m_emal_code           gtvsdax.gtvsdax_external_code%TYPE;
         m_from                gtvsdax.gtvsdax_desc%TYPE;
@@ -6614,15 +6715,19 @@ v_sum_teoria    :=0;
                 FETCH c_emal_code INTO m_emal_code, m_from, m_subject, m_body;
                 CLOSE c_emal_code;
 
-                OPEN c_email_address;
-                FETCH c_email_address INTO m_email_address;
-                CLOSE c_email_address;
+                begin
+                    OPEN c_email_address;
+                    FETCH c_email_address INTO m_email_address;
+                    CLOSE c_email_address;
+                exception when others then
+                           tzkpufc.p_ins_tzrrlog(0,  'GBA021', 'P_SHOW_PDF ERROR EN VISTA VIEW_TZRFACT_OPERACION', SQLCODE ||' ' ||SQLERRM);
+                end;
 
                 IF m_mail_test IS NULL or nvl(instr(m_mail_test,'@'),0)< 1
                 THEN
                     m_mail_test := m_email_address;
                 END IF;
-
+                tzkpufc.p_ins_tzrrlog(0,  'GBA021', 'P_SHOW_PDF 0', ' p_to '||m_email_address||' p_from'|| m_from||' p_footer ' ||p_footer);
                 IF p_footer is not null then
                    p_att1 := 'Pago en Línea: ' ||tzkpufc.f_get_url_pay(p_pidm, p_doc_number);
                 OPEN c_email_adm;
@@ -6630,6 +6735,7 @@ v_sum_teoria    :=0;
                 CLOSE c_email_adm;
 
                 END IF;
+                tzkpufc.p_ins_tzrrlog(0,  'GBA021', 'P_SHOW_PDF c_email_adm', ' p_to '||m_email_address||' p_from'|| m_from||SQLCODE ||' ' ||SQLERRM);
 
                 send_mail (
                     p_to =>  m_email_address,
@@ -6652,7 +6758,940 @@ v_sum_teoria    :=0;
             END;
         END IF;
 
+        exception when others then
+       tzkpufc.p_ins_tzrrlog(0,  'GBA021', 'P_SHOW_PDF ERR', SQLCODE ||' ' ||SQLERRM);
+    end;
+
+--Neoris hermes.navarro
+-- Procedimiento de despliegue de PDF de prefacturas y envio por correo de las mismas en solicitudes financieras
+-- Utiliza la funcionalidad de PLPDF para la creacion de documentos en formato PDF.
+-- 
+    PROCEDURE p_show_pdf_solicitudes (p_pidm         IN NUMBER,
+                                      p_doc_number   IN NUMBER,
+                                      p_send_mail    IN VARCHAR2 DEFAULT 'N',
+                                      p_web          IN VARCHAR2 DEFAULT NULL,
+                                      p_cod_sol      IN NUMBER,
+                                      p_footer in varchar2 default null)
+    IS
+        l_pdf                 BLOB;
+        p_nombre_estudiante   VARCHAR2 (1000);
+        p_att1 varchar2(1000);
+
+cursor c_get_due_date is
+select TZRDPRF_DUE_DOC_DATE
+  from TZRDPRF
+where TZRDPRF_PIDM = p_pidm    
+    and TZRDPRF_DOC_NUMBER = p_doc_number;
+
+cursor c_get_tzrven_code_obs  is
+        SELECT
+            TZRFVEN_LETR_CODE
+        FROM
+            tzrdprf, tzrfven
+        WHERE
+            tzrdprf_pidm = p_pidm
+            AND   tzrdprf_doc_number = p_doc_number
+            and TZRDPRF_TERM_CODE = TZRFVEN_TERM_CODE
+            and TZRDPRF_SDOC_CODE = TZRFVEN_SDOC_CODE
+            and TZRDPRF_CAMP_CODE = TZRFVEN_CAMP_CODE;
+
+
+        CURSOR c_nombre_completo
+        IS
+            SELECT    REPLACE (spriden_last_name, '/', ' ')
+                   || ' '
+                   || spriden_first_name
+                   || ' '
+                   || spriden_mi
+                       complete_name
+              FROM spriden
+             WHERE spriden_change_ind IS NULL AND spriden_pidm = p_pidm;
+
+        CURSOR c_cargos
+        IS
+SELECT c_order, CATEGORIA,
+                   CONCEPTO,
+                   TOTAL,
+                   TOTAL_AMT,
+                   TYPE_IND,
+                   (SUM (DECODE (TYPE_IND, 'P', TOTAL_AMT * -1, TOTAL_AMT))
+                        OVER (PARTITION BY CATEGORIA))
+                       gpo_amt,
+                       (SUM (DECODE (TYPE_IND, 'P', TOTAL * -1, TOTAL))
+                        OVER (PARTITION BY CATEGORIA))
+                       gpo_tot,
+                   (COUNT (0) OVER (PARTITION BY CATEGORIA))
+                       cnt_cat,
+                   ROW_NUMBER ()
+                       OVER (PARTITION BY CATEGORIA ORDER BY type_ind)
+                       row_cnt
+              FROM (  
+select tzkpufc.f_get_ordenamiento(TBBDETC_PAYT_CODE) c_order
+          , TTVPAYT_DESC categoria
+          , TBBDETC_DESC concepto
+          , sum(TZRFACT_AMNT_TRANS) total
+          , sum(TZRFACT_AMNT_TRANS) total_amt
+          , TBBDETC_TYPE_IND type_ind
+from tzrfact, tbbdetc, ttvpayt, gtvsdax
+where tzrfact_pidm = p_pidm
+  and TZRFACT_DOC_NUMBER = p_doc_number
+  and tbbdetc_detail_code = TZRFACT_DET_CODE_DOC
+  and TBBDETC_PAYT_CODE = TTVPAYT_CODE(+)
+  and TZRFACT_SDOC_CODE = GTVSDAX_EXTERNAL_CODE 
+  and GTVSDAX_INTERNAL_CODE_GROUP = 'PUCE_FACT' and GTVSDAX_INTERNAL_CODE = 'COD_PREF'
+  and tbbdetc_detail_code not in 
+                                       (select distinct TBBISTC_PRIN_DETAIL_CODE from TBBISTC where TBBISTC_PRIN_DETAIL_CODE is not null
+                                        UNION
+                                        select distinct TBBISTC_INT_DETAIL_CODE from TBBISTC  where TBBISTC_INT_DETAIL_CODE is not null)                                
+  group by TTVPAYT_DESC, TBBDETC_DESC, TBBDETC_TYPE_IND, TBBDETC_PAYT_CODE
+  having sum(TZRFACT_AMNT_TRANS) <> 0
+  ) ORDER BY c_order, categoria, type_ind, row_cnt ;
+
+        CURSOR c_leyenda (
+            p_letr_code    VARCHAR2)
+        IS
+              SELECT gubletr_para_seqno
+                         sec,          GUBPARA_SEQ_NO para_seq_no,             
+                         gtvpara_desc leyenda,
+                         gubpara_text_var texto                     
+                FROM gubletr,
+                     gtvletr,
+                     gtvpara,
+                     gubpara
+               WHERE     gtvletr_code = gubletr_letr_code
+                     AND gubletr_para_code = gtvpara_code
+                     AND gubletr_para_code = gubpara_para_code
+                     AND gubletr_letr_code = p_letr_code                     
+                     order by 1,2;
+
+        v_cod_obs             VARCHAR2 (15);
+        v_sum_teoria    number:=0; 
+         v_sum_practica number:=0;
+
+        CURSOR c_block_asignaturas
+        IS
+            SELECT UNIQUE sfrstcr_blck_code,
+            (select stvblck_desc from stvblck where stvblck_code = sfrstcr.sfrstcr_blck_code) des
+              FROM sfrstcr, ssbsect, scbcrse
+              WHERE sfrstcr_blck_code is not null    
+				   AND sfrstcr_term_code = SUBSTR (p_doc_number, 1, 6)
+                   AND sfrstcr_pidm = p_pidm
+                   AND ssbsect_term_code = sfrstcr_term_code
+                   AND ssbsect_crn = sfrstcr_crn
+                   AND EXISTS
+                           (SELECT 1
+                              FROM stvrsts
+                             WHERE     stvrsts_code = sfrstcr_rsts_code
+                                   AND stvrsts_incl_sect_enrl = 'Y')
+                   AND ssbsect_subj_code = scbcrse_subj_code
+                   AND ssbsect_crse_numb = scbcrse_crse_numb
+                   AND scbcrse_eff_term =
+                       (SELECT MAX (crse.scbcrse_eff_term)
+                          FROM scbcrse crse
+                         WHERE     scbcrse.scbcrse_subj_code =
+                                   crse.scbcrse_subj_code
+                               AND scbcrse.scbcrse_crse_numb =
+                                   crse.scbcrse_crse_numb
+                               AND crse.scbcrse_eff_term <= ssbsect_term_code);
+
+
+        CURSOR c_asignaturas
+        IS
+            SELECT SSBSECT_SUBJ_CODE                        curso,
+                   SSBSECT_CRSE_NUMB                        materia,
+                   scbcrse_title                            asignatura,
+                   NVL (SSBSECT_LEC_HR, SCBCRSE_LEC_HR_LOW) teoria,
+                   NVL (SSBSECT_LAB_HR, SCBCRSE_LAB_HR_LOW) practica,
+                   SSBSECT_CRN                              NRC
+              FROM sfrstcr, ssbsect, scbcrse
+             WHERE     sfrstcr_term_code = SUBSTR (p_doc_number, 1, 6)
+                   AND sfrstcr_pidm = p_pidm
+                   AND ssbsect_term_code = sfrstcr_term_code
+                   AND ssbsect_crn = sfrstcr_crn
+                   AND EXISTS
+                           (SELECT 1
+                              FROM stvrsts
+                             WHERE     stvrsts_code = sfrstcr_rsts_code
+                                   AND stvrsts_incl_sect_enrl = 'Y')
+                   AND ssbsect_subj_code = scbcrse_subj_code
+                   AND ssbsect_crse_numb = scbcrse_crse_numb
+                   AND scbcrse_eff_term =
+                       (SELECT MAX (crse.scbcrse_eff_term)
+                          FROM scbcrse crse
+                         WHERE     scbcrse.scbcrse_subj_code =
+                                   crse.scbcrse_subj_code
+                               AND scbcrse.scbcrse_crse_numb =
+                                   crse.scbcrse_crse_numb
+                               AND crse.scbcrse_eff_term <= ssbsect_term_code);
+
+        CURSOR c_cnt_asignaturas
+        IS
+            SELECT COUNT (0) cnt
+              FROM sfrstcr, ssbsect, scbcrse
+             WHERE     sfrstcr_term_code = SUBSTR (p_doc_number, 1, 6)
+                   AND sfrstcr_pidm = p_pidm
+                   AND ssbsect_term_code = sfrstcr_term_code
+                   AND ssbsect_crn = sfrstcr_crn
+                   AND EXISTS
+                           (SELECT 1
+                              FROM stvrsts
+                             WHERE     stvrsts_code = sfrstcr_rsts_code
+                                   AND stvrsts_incl_sect_enrl = 'Y')
+                   AND ssbsect_subj_code = scbcrse_subj_code
+                   AND ssbsect_crse_numb = scbcrse_crse_numb
+                   AND scbcrse_eff_term =
+                       (SELECT MAX (crse.scbcrse_eff_term)
+                          FROM scbcrse crse
+                         WHERE     scbcrse.scbcrse_subj_code =
+                                   crse.scbcrse_subj_code
+                               AND scbcrse.scbcrse_crse_numb =
+                                   crse.scbcrse_crse_numb
+                               AND crse.scbcrse_eff_term <= ssbsect_term_code);
+
+                        cursor c_is_adm is
+                        SELECT 'Y'
+                        FROM  tzvaccd
+                       WHERE  tzvaccd_pidm = p_pidm
+                            and TZVACCD_DCAT_CODE= 'APF'   
+                            AND tzvaccd_tran_number in (select tvrsdoc_chg_tran_number from tvrsdoc
+                                            where tvrsdoc_pidm = tzvaccd_pidm                             
+                                             AND tvrsdoc_sdoc_code = (select GTVSDAX_EXTERNAL_CODE from gtvsdax where GTVSDAX_INTERNAL_CODE_GROUP = 'PUCE_FACT' and GTVSDAX_INTERNAL_CODE = 'COD_PREF')
+                                             AND tvrsdoc_doc_number = p_doc_number
+                                             AND tvrsdoc_doc_cancel_ind IS NULL)  ;
+
+                       v_is_adm varchar2(1);
+
+        CURSOR c_identificacion
+        IS
+            SELECT (SELECT stvlgcy_desc
+                      FROM stvlgcy
+                     WHERE stvlgcy_code = spbpers_lgcy_code)
+                       tipo_identificacion,
+                   spbpers_ssn
+                       identificacion
+              FROM spbpers
+             WHERE spbpers_pidm = p_pidm;
+
+        v_tipo_iden           stvlgcy.stvlgcy_desc%TYPE;
+        v_iden                spbpers.spbpers_ssn%TYPE;
+
+        CURSOR c_cohort (
+            p_pidm         NUMBER,
+            p_term_code    VARCHAR2)
+        IS
+       select   max(pr.SGRCHRT_CHRT_CODE)
+from  sgrchrt pr
+where pr.SGRCHRT_PIDM = p_pidm
+and pr.SGRCHRT_STSP_KEY_SEQUENCE = (select max(SFRSTCR_STSP_KEY_SEQUENCE) from SFRSTCR where SFRSTCR_PIDM = p_pidm  and SFRSTCR_TERM_CODE =  p_term_code)
+and pr.sgrchrt_term_code_eff = (select max (sc.sgrchrt_term_code_eff) from sgrchrt sc where sc.SGRCHRT_PIDM = p_pidm and sc.sgrchrt_term_code_eff <= p_term_code)
+and pr.SGRCHRT_CHRT_CODE is not null;
+
+        v_cohort              SGRCHRT.SGRCHRT_CHRT_CODE%TYPE;
+        l_num_mask            VARCHAR2 (20) := 'L999G999G999D00';
+        v_total_cargos        NUMBER;
+        v_enca_ara            VARCHAR2 (1) := 'N';
+        v_enca_mat            VARCHAR2 (1) := 'N';
+        v_enca_ter            VARCHAR2 (1) := 'N';
+        v_enca_otr            VARCHAR2 (1) := 'N';
+        v_encabezado          TTVPAYT.TTVPAYT_DESC%TYPE := 'X';
+        v_grupo               TTVPAYT.TTVPAYT_DESC%TYPE;
+
+
+
+        CURSOR c_fecha_emision
+        IS
+            SELECT TZRFACT_PREFACT_DATE, 
+            TZRFACT_CURR_PROGRAM programa, decode(TZRFACT_CAMPUS, null, (select STVCAMP_CODE  from stvcamp where STVCAMP_DICD_CODE = substr(TZRFACT_DOC_NUMBER,7,1) and rownum =1), TZRFACT_CAMPUS) campus
+              FROM tzrfact
+             WHERE     TZRFACT_PIDM = p_pidm
+                   AND TZRFACT_DOC_NUMBER = p_doc_number;
+
+        v_fecha_emision       DATE := SYSDATE;
+
+        CURSOR c_smtp
+        IS
+            SELECT gtvsdax_external_code, gtvsdax_desc, gtvsdax_comments
+              FROM gtvsdax
+             WHERE     gtvsdax_internal_code_group = 'PUCE_FACT'
+                   AND gtvsdax_internal_code = 'SMTP';
+
+        m_port                gtvsdax.gtvsdax_external_code%TYPE;
+        m_host                gtvsdax.gtvsdax_desc%TYPE;
+        m_mail_test           gtvsdax.gtvsdax_comments%TYPE;
+
+        CURSOR c_emal_code
+        IS
+            SELECT gtvsdax_external_code,
+             --acastillo caso correo por sede
+                    --tzkpufc.f_get_sde_val('STVCAMP', 'CORREO_SEDE_PREF', p_sede) gtvsdax_desc,
+                   gtvsdax_desc,
+                   gtvsdax_concept,
+                   gtvsdax_comments
+              FROM gtvsdax
+             WHERE     gtvsdax_internal_code_group = 'PUCE_FACT'
+                   AND gtvsdax_internal_code = 'EMAL_SEDE'
+                   AND gtvsdax_translation_code = p_sede;
+
+        m_emal_code           gtvsdax.gtvsdax_external_code%TYPE;
+        m_from                gtvsdax.gtvsdax_desc%TYPE;
+        m_subject             gtvsdax.gtvsdax_concept%TYPE;
+        m_body                gtvsdax.gtvsdax_comments%TYPE;
+
+        CURSOR c_email_address
+        IS
+        SELECT GOREMAL_EMAIL_ADDRESS FROM VIEW_TZRFACT_OPERACION 
+        WHERE TZRFACT_PIDM= p_pidm 
+        AND TZRFACT_DOC_NUMBER= p_doc_number
+        AND TZRFACT_SDOC_CODE=
+        (select GTVSDAX_EXTERNAL_CODE from gtvsdax 
+        where GTVSDAX_INTERNAL_CODE_GROUP = 'PUCE_FACT' 
+        and GTVSDAX_INTERNAL_CODE = 'COD_PREF');
+
+        CURSOR c_email_inst--solo el correo preferido independientemente de si es institucional o personal
+        IS
+        SELECT GOREMAL_EMAIL_ADDRESS FROM GOREMAL 
+        WHERE GOREMAL_PIDM= p_pidm          
+            --AND goremal_emal_code = '0010'
+            and GOREMAL_PREFERRED_IND = 'Y';/*(SELECT GTVSDAX_EXTERNAL_CODE
+        FROM GTVSDAX
+        WHERE GTVSDAX_INTERNAL_CODE_GROUP ='SARAPPD_GBA021'
+        AND GTVSDAX_INTERNAL_CODE ='EMAL_CODE')
+            AND goremal_status_ind = 'A';*/
+
+
+        m_email_address       goremal.goremal_email_address%TYPE := '';
+
+        CURSOR c_due_date (
+            p_term         VARCHAR2,
+            p_sdoc_code    VARCHAR2,
+            p_program      VARCHAR2,
+            p_campus       VARCHAR2,
+            p_levl_code    VARCHAR2,
+            p_chrt_code    VARCHAR2)
+        IS
+            SELECT TZRFVEN_END_DATE
+              FROM TZRFVEN
+             WHERE     tzrfven_term_code = p_term
+                   AND tzrfven_sdoc_code = p_sdoc_code
+                   AND NVL (tzrfven_program_code, p_program) = p_program
+                   AND tzrfven_camp_code = p_campus
+                   AND NVL (tzrfven_levl_code, p_levl_code) = p_levl_code
+                   AND NVL (tzrfven_chrt_code, p_chrt_code) = p_chrt_code;
+
+        v_due_date            DATE;
+        varx plpdf_type.t_color;
+        l_widths              plpdf_type.t_row_widths;      
+        l_aligns              plpdf_type.t_row_aligns;      
+        l_datas               plpdf_type.t_row_datas;       
+        l_borders             plpdf_type.t_row_borders;   
+        l_styles              plpdf_type.t_row_styles;      
+        l_maxlines            plpdf_type.t_row_maxlines; 
+
+        l_border_custom       VARCHAR2 (2) := '';
+        l_aligns_center       VARCHAR2 (2) := 'C';
+        l_aligns_left         VARCHAR2 (2) := 'L';
+        l_aligns_rigth        VARCHAR2 (2) := 'R';
+        l_font_arial          NUMBER := 10;
+        l_cell_arial          NUMBER := l_font_arial - 4;
+        l_font_courier        NUMBER := 8;
+        l_cell_courier        NUMBER := l_font_courier - 3.5;
+        l_font_times          NUMBER := 14;
+        l_cell_times          NUMBER := l_font_times - 8;
+        l_widths_infotab      plpdf_type.t_row_widths;      
+        l_widths_totaltab     plpdf_type.t_row_widths;     
+        l_logo_posy           NUMBER;
+        v_fill_spaces_20      VARCHAR2 (35) := '                    ';
+        v_fill_spaces_30      VARCHAR2 (35)
+                                  := '                              ';
+        v_fill_spaces_40      VARCHAR2 (48)
+            := '                                             ';
+
+        v_amt                 VARCHAR2 (200);
+        v_subtotal                 VARCHAR2 (200);
+        v_tot_gpo             NUMBER := 0;
+        p_gpo                 NUMBER := 0;
+        p_gpo_printed         VARCHAR2 (1) := 'N';
+
+
+
+        p_cnt_asign           NUMBER := 0;
+		l_block_asignaturas	  varchar2(100);	
+		l_desc_block_asignaturas	  varchar2(100);	
+
+        cursor c_get_sede_name (p_doc_number varchar2) is
+          select f_format_name (gb_common.f_get_pidm (gtvsdax_external_code), 'L60') 
+          FROM gtvsdax
+         WHERE  gtvsdax_internal_code_group = 'PUCE_FACT'
+                     AND gtvsdax_internal_code = 'ID_PUCE'
+                     AND GTVSDAX_TRANSLATION_CODE =   substr(p_doc_number,7,1)  ;
+
+      p_sede_name varchar2(300);
+
+    BEGIN
+
+
+        OPEN c_get_sede_name (p_doc_number);
+        FETCH c_get_sede_name INTO p_sede_name;
+        CLOSE c_get_sede_name;
+
+
+        OPEN c_nombre_completo;
+        FETCH c_nombre_completo INTO p_nombre_estudiante;
+        CLOSE c_nombre_completo;
+
+
+        OPEN c_identificacion;
+        FETCH c_identificacion INTO v_tipo_iden, v_iden;
+        CLOSE c_identificacion;
+
+
+                p_levl          := f_get_sovlcur(p_pidm, SUBSTR (p_doc_number, 1, 6), 'LEVL' );
+
+
+        OPEN c_cohort (p_pidm, SUBSTR (p_doc_number, 1, 6));
+        FETCH c_cohort INTO v_cohort;
+        CLOSE c_cohort;
+
+        OPEN c_fecha_emision;
+        FETCH c_fecha_emision INTO v_fecha_emision, p_program, p_sede;
+        CLOSE c_fecha_emision;
+
+        OPEN c_get_data_i ('PUCE_FACT', 'COD_PREF', 'EXT');
+        FETCH c_get_data_i INTO p_sdoc_pref;
+        CLOSE c_get_data_i;
+
+        OPEN c_due_date (SUBSTR (p_doc_number, 1, 6),
+                         p_sdoc_pref,
+                         p_program,
+                         p_sede,
+                         p_levl,
+                         v_cohort);
+
+        FETCH c_due_date INTO v_due_date;
+
+        CLOSE c_due_date;
+
+        plpdf.init (p_orientation   => plpdf_const.portrait,
+                    p_unit          => plpdf_const.mm,
+                    p_format        => 'letter');
+
+
+        plpdf.newpage;
+
+        plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 10);
+        plpdf_cell.printcell (
+            p_width =>
+                195,
+            p_align =>
+                plpdf3.c_center,
+            p_text => p_sede_name || v_fill_spaces_40 || v_fill_spaces_20);
+
+        plpdf_cell.newline;  plpdf_cell.newline;plpdf_cell.newline;
+
+        plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 10);
+        plpdf_cell.printcell (
+            p_width =>
+                195,
+            p_align =>
+                plpdf3.c_right,
+            p_text =>
+                   'Fecha de Emisión: '
+                || NVL (v_fecha_emision, SYSDATE)
+                || v_fill_spaces_30);
+
+          plpdf_cell.newline; plpdf_cell.newline;
+
+          plpdf.printcell ( p_w   => 32, p_txt    =>RPAD('Periodo:', 13, ' '), p_ln       => plpdf_const.beside);
+          plpdf.setprintfont (p_family => 'Arial', p_style => '', p_size => 10);
+          plpdf.printcell ( p_w   => 163, p_txt    =>SUBSTR (p_doc_number, 1, 6) || ' ' || GB_STVTERM.f_get_description (SUBSTR (p_doc_number, 1, 6)), p_ln       => plpdf_const.newline);
+
+          plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 10);
+          plpdf.printcell ( p_w   => 32, p_txt    =>RPAD('Estudiante:', 13, ' '), p_ln       => plpdf_const.beside);
+          plpdf.setprintfont (p_family => 'Arial', p_style => '', p_size => 10);
+          plpdf.printcell ( p_w =>163, p_txt => p_nombre_estudiante|| ' ('|| gb_common.f_get_id (p_pidm)|| ')', p_ln       => plpdf_const.newline);
+
+          plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 10);
+          plpdf.printcell ( p_w   => 32, p_txt    =>RPAD(v_tipo_iden ||':', 13, ' '), p_ln       => plpdf_const.beside);
+          plpdf.setprintfont (p_family => 'Arial', p_style => '', p_size => 10);
+          plpdf.printcell ( p_w =>163, p_txt => v_iden, p_ln       => plpdf_const.newline);
+
+          plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 10);
+          plpdf.printcell ( p_w   => 32, p_txt    =>RPAD('Carrera:', 13, ' '), p_ln       => plpdf_const.beside);
+          plpdf.setprintfont (p_family => 'Arial', p_style => '', p_size => 10);
+          plpdf.printcell ( p_w =>163, p_txt => BWCKCAPP.get_program_desc (p_program), p_ln       => plpdf_const.newline);
+
+         IF v_cohort is not null then
+          plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 10);
+          plpdf.printcell ( p_w   => 32, p_txt    =>RPAD('Cohort:', 13, ' '), p_ln       => plpdf_const.beside);
+
+          plpdf.setprintfont (p_family => 'Arial', p_style => '', p_size => 10);
+          plpdf.printcell ( p_w =>163, p_txt => v_cohort, p_ln       => plpdf_const.newline);
+
+         END IF; 
+
+        plpdf_cell.newline;
+
+       plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 10);
+        plpdf_cell.printcell (
+            p_width =>
+                190,
+            p_text =>
+                'Comprobante no. ' || f_get_docnum_fmt (p_doc_number));
+        plpdf_cell.newline;plpdf_cell.newline;
+
+
+        plpdf.Line(
+        p_x1 => 10,
+        p_y1 => plpdf.getCurrentY(), 
+        p_x2 => 205,
+        p_y2 => plpdf.getCurrentY());
+
+
+        plpdf_cell.newline;        plpdf_cell.newline;
+
+        v_total_cargos := 0;
+
+        FOR chrg IN c_cargos
+        LOOP
+            IF chrg.categoria <> v_encabezado
+            THEN
+                plpdf.setprintfont (p_family   => 'Arial',
+                                    p_style    => 'B',
+                                    p_size     => 9);
+
+                plpdf_cell.printcell (p_width => 190, p_text => chrg.categoria);
+                plpdf_cell.newline;
+
+                v_encabezado := chrg.categoria;
+            END IF;
+
+            plpdf_cell.init;
+            plpdf.setprintfont (p_family => 'Arial', p_size => 9);
+
+            plpdf.printcell (p_w        => 150,             
+                             p_txt      => chrg.concepto, 
+                             p_border   => '0',                  
+                             p_ln       => plpdf_const.beside, 
+                             p_align    => 'L',      
+                             p_fill     => FALSE 
+                                                );
+
+            IF chrg.type_ind = 'P'
+            THEN
+                v_amt := '(-)' || TRIM (TO_CHAR (chrg.total_amt, l_num_mask));
+            ELSE
+                IF chrg.total_amt > chrg.total then
+                v_amt := TRIM (TO_CHAR (chrg.total, l_num_mask));
+                ELSE
+                v_amt := TRIM (TO_CHAR (chrg.total_amt, l_num_mask));
+                END IF;
+
+            END IF;
+
+            plpdf.printcell (p_w        => 45,              
+                             p_txt      => v_amt || v_fill_spaces_20, 
+                             p_border   => '0',                  
+                             p_ln       => plpdf_const.newline, 
+                             p_align    => 'R',      
+                             p_fill     => FALSE 
+                                                );
+
+            IF chrg.cnt_cat = chrg.row_cnt
+            THEN
+
+                IF chrg.GPO_AMT <> chrg.GPO_TOT then
+                 v_subtotal := to_char(chrg.GPO_TOT);
+                ELSE
+                 v_subtotal := to_char(chrg.GPO_AMT);
+                END IF; 
+             v_total_cargos := v_total_cargos + v_subtotal;
+
+                plpdf.setprintfont (p_family   => 'Arial',
+                                    p_style    => 'B',
+                                    p_size     => 9);
+
+                plpdf.printcell (
+                    p_w =>
+                        195,
+                    p_txt =>
+                           TRIM (TO_CHAR (v_subtotal, l_num_mask))
+                        || v_fill_spaces_20,
+                    p_border =>
+                        '0',
+                    p_ln =>
+                        plpdf_const.newline,
+                    p_align =>
+                        'R',
+                    p_fill =>
+                        FALSE);
+
+            END IF;
+        END LOOP;
+
+        plpdf_cell.newline;
+
+        plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 9);
+        plpdf_cell.printcell (p_width   => 190,
+                              p_text    => 'SERVICIOS FACTURADOS +  IVA');
+        plpdf_cell.newline;
+
+        plpdf_cell.init;
+        plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 9);
+
+        plpdf.printcell (p_w        => 150,
+                         p_txt      => 'Total +  IVA',
+                         p_border   => '0',
+                         p_ln       => plpdf_const.beside,
+                         p_align    => 'L',
+                         p_fill     => FALSE);
+
+        plpdf.printcell (
+            p_w =>
+                45,
+            p_txt =>
+                   TRIM (TO_CHAR (v_total_cargos, l_num_mask))
+                || v_fill_spaces_20,
+            p_border =>
+                '0',
+            p_ln =>
+                plpdf_const.newline,
+            p_align =>
+                'R',
+            p_fill =>
+                FALSE);
+
+        ------------------------------------------------------------------------------------------------------------
+        OPEN c_get_due_date;
+        FETCH c_get_due_date into v_due_date;
+        CLOSE  c_get_due_date;   
+
+        plpdf_cell.newline;plpdf_cell.newline;
+
+            plpdf_cell.init;
+        plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 9);
+
+        plpdf.printcell (p_w        => 57,
+                         p_txt      => 'Fecha máxima de pago: ',
+                         p_border   => '0',
+                         p_ln       => plpdf_const.beside,
+                         p_align    => 'L',
+                         p_fill     => FALSE);
+
+        plpdf.printcell (
+            p_w =>
+                60,
+            p_txt =>
+                   (v_due_date)
+                ,
+            p_border =>
+                '0',
+            p_ln =>
+                plpdf_const.newline,
+            p_align =>
+                'L',
+            p_fill =>
+                FALSE);
+
+        plpdf_cell.newline;
+        plpdf_cell.newline;
+
+        OPEN c_cnt_asignaturas;
+        FETCH c_cnt_asignaturas INTO p_cnt_asign;
+        CLOSE c_cnt_asignaturas;
+
+        open  c_is_adm;
+        fetch c_is_adm into v_is_adm;
+        close c_is_adm;
+
+        IF p_cnt_asign > 0
+        THEN
+           IF v_is_adm is null then
+		    l_block_asignaturas := null;
+            l_desc_block_asignaturas := null;
+		    open  c_block_asignaturas;
+			fetch c_block_asignaturas into l_block_asignaturas, l_desc_block_asignaturas;
+			close c_block_asignaturas;
+
+			if l_block_asignaturas is not null then
+				plpdf_cell.newline;
+
+				plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 9);
+				plpdf_cell.printcell (p_width   => 190,
+									  p_text    => ' Bloque: '||l_block_asignaturas||' '||l_desc_block_asignaturas);
+				plpdf.setprintfont (p_family   => 'Arial',
+									p_style    => 'B',
+									p_size     => 9);
+				plpdf_cell.newline;
+
+			end if;
+
+            plpdf.printcell (p_w        => 20,              
+                             p_txt      => g$_nls.get ('X', 'SQL', 'Curso'), 
+                             p_border   => '0',                  
+                             p_ln       => plpdf_const.beside, 
+                             p_align    => 'L',      
+                             p_fill     => FALSE 
+                                                );
+
+            plpdf.printcell (p_w        => 20,              
+                             p_txt      => g$_nls.get ('X', 'SQL', 'Materia'), 
+                             p_border   => '0',                  
+                             p_ln       => plpdf_const.beside, 
+                             p_align    => 'L',      
+                             p_fill     => FALSE 
+                                                );
+
+            plpdf.printcell (p_w        => 80,              
+                             p_txt      => g$_nls.get ('X', 'SQL', 'Asignatura'), 
+                             p_border   => '0',                  
+                             p_ln       => plpdf_const.beside, 
+                             p_align    => 'L',      
+                             p_fill     => FALSE 
+                                                );
+
+            plpdf.printcell (p_w        => 20,              
+                             p_txt      => g$_nls.get ('X', 'SQL', 'Teoría'), 
+                             p_border   => '0',                 
+                             p_ln       => plpdf_const.beside, 
+                             p_align    => 'L',      
+                             p_fill     => FALSE 
+                                                );
+
+            plpdf.printcell (p_w        => 30,             
+                             p_txt      => g$_nls.get ('X', 'SQL', 'Práctica'), 
+                             p_border   => '0',                 
+                             p_ln       => plpdf_const.beside, 
+                             p_align    => 'L',      
+                             p_fill     => FALSE 
+                                                );
+
+            plpdf.printcell (p_w        => 20,              
+                             p_txt      => g$_nls.get ('X', 'SQL', 'NRC'), 
+                             p_border   => '0',                 
+                             p_ln       => plpdf_const.newline, 
+                             p_align    => 'L',      
+                             p_fill     => FALSE 
+                                                );
+
+            plpdf_cell.init;
+            plpdf.setprintfont (p_family => 'Arial', p_size => 9);
+
+v_sum_teoria    :=0; 
+         v_sum_practica :=0;
+
+            FOR asig IN c_asignaturas
+            LOOP
+                plpdf.printcell (p_w        => 20,
+                                 p_txt      => asig.curso,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside,
+                                 p_align    => 'L',
+                                 p_fill     => FALSE);
+
+                plpdf.printcell (p_w        => 20,
+                                 p_txt      => asig.materia,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside,
+                                 p_align    => 'L',
+                                 p_fill     => FALSE);
+
+                plpdf.printcell (p_w        => 80,
+                                 p_txt      => asig.asignatura,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside,
+                                 p_align    => 'L',
+                                 p_fill     => FALSE);
+
+                plpdf.printcell (p_w        => 20,
+                                 p_txt      => asig.teoria,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside,
+                                 p_align    => 'C',
+                                 p_fill     => FALSE);
+
+                plpdf.printcell (p_w        => 25,
+                                 p_txt      => asig.practica,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside,
+                                 p_align    => 'C',
+                                 p_fill     => FALSE);
+
+                plpdf.printcell (p_w        => 20,
+                                 p_txt      => asig.nrc,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.newline,
+                                 p_align    => 'C',
+                                 p_fill     => FALSE);
+
+                v_sum_teoria    :=v_sum_teoria + asig.teoria; 
+                v_sum_practica := v_sum_practica + asig.practica;
+
+            END LOOP;
+            plpdf.printcell (p_w        => 120,
+                                 p_txt      => ' ',
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside,
+                                 p_align    => 'L',
+                                 p_fill     => FALSE);
+
+                plpdf.printcell (p_w        => 20,
+                                 p_txt      => v_sum_teoria,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside,
+                                 p_align    => 'C',
+                                 p_fill     => FALSE);
+
+                plpdf.printcell (p_w        => 25,
+                                 p_txt      => v_sum_practica,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.newline,
+                                 p_align    => 'C',
+                                 p_fill     => FALSE);
+                     END IF; 
+        END IF;                                            
+
+
+        plpdf.Line(
+        p_x1 => 10,
+        p_y1 => plpdf.getCurrentY(), 
+        p_x2 => 205,
+        p_y2 => plpdf.getCurrentY());
+
+
+        plpdf_cell.newline;
+        plpdf_cell.newline;
+
+
+        open c_get_tzrven_code_obs;
+        fetch c_get_tzrven_code_obs into v_cod_obs;
+        close c_get_tzrven_code_obs;
+
+
+        OPEN c_get_data_i ('PUCE_FACT', 'COD_PREF', 'EXT');
+        FETCH c_get_data_i INTO p_sdoc_pref;
+        CLOSE c_get_data_i;
+
+        OPEN c_get_data_i ('PUCE_FACT', 'OBS_DFLT', 'EXT');
+        FETCH c_get_data_i INTO p_obs_dflt;
+        CLOSE c_get_data_i;
+
+
+        if v_cod_obs is null then
+         v_cod_obs := p_obs_dflt;
+        end if; 
+
+        FOR text IN c_leyenda (v_cod_obs)
+        LOOP
+
+         IF text.para_seq_no = 1 then
+         plpdf_cell.init;
+         plpdf.setprintfont (p_family => 'Arial', p_style => 'B', p_size => 9);
+
+         plpdf.printcell (p_w        => 48,
+                                 p_txt      => text.leyenda, --'Observaciones: ',--
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside, --newline
+                                 p_align    => 'L',
+                                 p_fill     => FALSE);
+         ELSE
+         plpdf.printcell (p_w        => 48,
+                                 p_txt      => ' ',
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.beside, --newline
+                                 p_align    => 'L',
+                                 p_fill     => FALSE);
+         END IF;
+
+         plpdf_cell.init;
+         plpdf.setprintfont (p_family => 'Arial', p_size => 8);
+
+         plpdf.printcell (p_w        => 165,
+                                 p_txt      => text.texto,
+                                 p_border   => '0',
+                                 p_ln       => plpdf_const.newline,
+                                 p_align    => 'L',
+                                 p_fill     => FALSE);
+
+
+        END LOOP;
+
+
+        plpdf.senddoc (p_blob => l_pdf);
+
+        IF p_web IS NULL
+        THEN
+            HTP.flush;
+            HTP.init;
+            --
+            OWA_UTIL.mime_header ('application/pdf', FALSE);
+            HTP.p ('Content-Length: ' || DBMS_LOB.getlength (l_pdf));
+            OWA_UTIL.http_header_close;
+            WPG_DOCLOAD.download_file (l_pdf);
+        END IF;
+
+        IF p_send_mail = 'Y'
+        THEN
+
+         m_mail_test := '';
+
+            BEGIN
+                OPEN c_smtp;
+                FETCH c_smtp INTO m_port, m_host, m_mail_test;
+                CLOSE c_smtp;
+
+                OPEN c_emal_code;
+                FETCH c_emal_code INTO m_emal_code, m_from, m_subject, m_body;
+                CLOSE c_emal_code;
+
+                OPEN c_email_address;
+                FETCH c_email_address INTO m_email_address;
+                CLOSE c_email_address;
+
+                IF m_mail_test IS NULL or nvl(instr(m_mail_test,'@'),0)< 1
+                THEN
+                    m_mail_test := m_email_address;
+                END IF;
+
+                IF p_footer is not null then
+                   p_att1 := 'Pago en Línea: ' ||tzkpufc.f_get_url_pay(p_pidm, p_doc_number);
+                    OPEN c_email_inst;
+                    FETCH c_email_inst INTO m_email_address;
+                    CLOSE c_email_inst;
+
+                END IF;
+                --se valida que el email institucional no sea nullo ni esta vacio
+                if m_email_address is null or m_email_address = '' then
+                    PK_SVRSSOL.P_INSERT_MENSAJE_ERROR ( p_cod_sol , p_pidm, 'TZKPUFC.p_show_pdf_solicitudes->El estudiante no tiene correo preferido registrado' );
+
+                else 
+                    begin
+                        send_mail (
+                            p_to =>  m_email_address,
+                            p_from =>
+                                m_from,
+                            p_subject =>
+                                m_subject || ' ' || f_get_docnum_fmt (p_doc_number),
+                            p_text_msg =>
+                                m_body || chr(10)||chr(10) || p_att1,
+                            p_attach_name =>
+                                f_get_docnum_fmt (p_doc_number) || '.pdf',
+                            p_attach_mime =>
+                                'application/pdf',
+                            p_attach_blob =>
+                                l_pdf,
+                            p_smtp_host =>
+                                m_host,
+                            p_smtp_port =>
+                                m_port);
+                    exception when others then
+                        PK_SVRSSOL.P_INSERT_MENSAJE_ERROR ( p_cod_sol , p_pidm, 'TZKPUFC.p_show_pdf_solicitudes->Error enviando el correo a la dirección: '||m_email_address||' ->Error: '||TO_CHAR(SQLCODE)||' Mensaje: '||SQLERRM );
+                    end;
+                end if;
+            END;
+        END IF;
+
     END;
+--Neoris hermes.navarro
 
 -- Funcion interna de transformación de tipo de dato que utilizan los datos suplementarios.
     FUNCTION getData (data IN SYS.ANYDATA)
@@ -8029,15 +9068,19 @@ fetch c_get_sdoc_code_val into p_sdoc_code_val;
 close c_get_sdoc_code_val;
 
 
---open c_get_doc_fecha_valida (p_pidm,p_doc_num) ;
-open c_get_doc_fecha_valida (p_doc_num) ;
-fetch c_get_doc_fecha_valida into p_fecha_vigencia_valida;
-close c_get_doc_fecha_valida;
+                --open c_get_doc_fecha_valida (global_pidm,p_doc_num) ;
+                open c_get_doc_fecha_valida (p_doc_num) ;
+                fetch c_get_doc_fecha_valida into p_fecha_vigencia_valida;
+                close c_get_doc_fecha_valida;
+
+                p_ins_tzrrlog(global_pidm,  'GENERA_PREFACTURA', 'c_get_doc_fecha_valida', p_fecha_vigencia_valida || ' p_doc_num: '||p_doc_num, user);
 
                 --ACASTILLO control temporal para proceso de borrado
                 open c_dat_prefac (p_doc_num) ;
                 fetch c_dat_prefac into p_term_pref,p_camp_pref;
                 close c_dat_prefac;
+
+                p_ins_tzrrlog(global_pidm,  'GENERA_PREFACTURA', 'c_dat_prefac', p_term_pref || ' p_camp_pref: '||p_camp_pref, user);
 
                 v_get_borrado := 'N';
                 v_get_desc_borr := '';
@@ -8054,6 +9097,7 @@ close c_get_doc_fecha_valida;
                 END IF;
                 --
 
+
                 IF p_status is null or p_status = 'REJECTED' or p_status = 'FAILED' then
 
                    HTP.p ( '<th> <button type = "button" onclick="myFunction('''||rec_provider.tzvoprd_pidm||''','''||p_pidm||''','''||p_sede||''','''||p_sdoc_pref||''','''||p_doc_num||''','''||substr(p_doc_num,1,6)||''','''||rec_provider.servicio||''','''||rec_provider.iden_ws||''')">Pagar</button> </th>');
@@ -8065,7 +9109,7 @@ close c_get_doc_fecha_valida;
                     ELSIF p_status = 'VENCIDO' then
                     twbkfrmt.p_tabledata(' Prefactura Vencida');
                     ELSIF p_status = 'SUSPENDED' then
-                    twbkfrmt.p_tabledata(v_get_desc_borr);    
+                    twbkfrmt.p_tabledata(v_get_desc_borr);                    
                     ELSIF p_status = 'KUSHKI' then
                     twbkfrmt.p_tabledata('Referencia:' || p_reference ||'. '||'La petición se encuenta en proceso, valide en unos minutos su estado.');
                     ELSE 
@@ -8483,6 +9527,7 @@ PROCEDURE p_reenvia_prefactura (p_one_up_no IN NUMBER)
                                                  40,
                                                  'LEFT',
                                                  '   ');
+                --tzkpufc.p_ins_tzrrlog(0,  'GBA021', 'P_SHOW_PDF -1', ' p_pidm '||p_pidm||' v_moda'|| v_moda||SQLCODE ||' ' ||SQLERRM);
 
                 IF v_moda = 'U' THEN
                     tzkpufc.p_show_pdf (p_pidm => ren.t_pidm,
@@ -8603,7 +9648,7 @@ cursor c_get_credntb_sricodenc (p_sri_doc_number varchar2) is
 select unique TZRFACT_CREDNT_BNNR, TZRFACT_CREDNT_SRICODE 
   from tzrfact  
 where TZRFACT_SRI_DOCNUM = p_sri_doc_number
-and   TZRFACT_NC_CANCEL_IND is null 									
+and   TZRFACT_NC_CANCEL_IND is null 
 and   TZRFACT_SDOC_CODE = 'BN';
 
 cursor c_get_doc_number is
@@ -8677,7 +9722,7 @@ WHERE
     AND   j.tzrfact_doc_number = p_doc_number
     AND  j.TZRFACT_SRI_DOCNUM = p_sri_doc_number
     AND j.TZRFACT_FACT_CANCEL_IND is null
-	and   j.TZRFACT_NC_CANCEL_IND is null 									  
+    and   j.TZRFACT_NC_CANCEL_IND is null 
     AND   j.tzrfact_sdoc_code = (
         SELECT
             gtvsdax_external_code
@@ -8797,6 +9842,7 @@ WHERE
 													  p_seq             => v_int_seq,    
 													  p_errormsg        => v_int_error,
 													  p_camp_district   => v_int_district); 
+                    p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_credit_note: ', p_sri_doc_number||' p_doc_number:'||p_doc_number||' v_int_NC:'||v_int_NC ||' Error '||p_return||sqlerrm, user);
 
 				IF v_int_error IS NOT NULL  THEN
 					p_return := g$_nls.get ('X', 'SQL', v_int_error);
@@ -8813,6 +9859,8 @@ WHERE
 				 FETCH c_get_data_i INTO p_sdoc_sri_nc;
 				CLOSE c_get_data_i;
 
+                p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_credit_note: ', p_sri_doc_number||' p_doc_number:'||p_doc_number||' p_pidm:'||p_pidm ||' Error '||p_return||sqlerrm, user);
+
 				tzkpufc.p_get_next_folio (p_doctype         => p_sdoc_sri_nc, 
 													  p_user            => NVL(p_user_id,user), 
 													  p_camp_code       => p_int_CAMP_CODE,
@@ -8823,6 +9871,8 @@ WHERE
 													  p_errormsg        => v_sri_error,
 													  p_camp_district   => v_sri_district); 
 
+                p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_get_next_folio: ', p_sri_doc_number||' p_doc_number:'||p_doc_number||' v_sri_NC:'||v_sri_NC ||' Error '||p_return||sqlerrm, user);
+
 
 				IF v_sri_error IS NOT NULL  THEN
 					p_return := g$_nls.get ('X', 'SQL', v_sri_error);
@@ -8832,21 +9882,7 @@ WHERE
 
 
 					IF v_int_NC is not null and v_int_error is null and v_sri_NC is not null and  v_sri_error is null then 
-                        p_update_secuencia (p_int_SDOC_CODE,
-                                                    NVL(p_user_id,user),
-                                                    p_int_PREFIX_1,
-                                                    p_int_PREFIX_2,
-                                                    p_int_CAMP_CODE,
-                                                    v_int_NC,
-                                                    p_int_error_msg);
 
-                        p_update_secuencia (p_sdoc_sri_nc,
-                                                    NVL(p_user_id,user),
-                                                    p_sri_PREFIX_1,
-                                                    p_sri_PREFIX_2,
-                                                    p_int_CAMP_CODE,
-                                                    v_sri_NC,
-                                                    p_sri_error_msg);
 						l_crednt_bnnr := null;
 						l_crednt_sricode := null;
 
@@ -8854,7 +9890,31 @@ WHERE
 						fetch c_get_credntb_sricodenc into l_crednt_bnnr,l_crednt_sricode;
 						close c_get_credntb_sricodenc;
 
+						p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'c_get_credntb_sricodenc: ', 'p_sri_doc_number '||p_sri_doc_number||' p_doc_number:'||p_doc_number||' l_crednt_bnnr:'||l_crednt_bnnr ||' l_crednt_sricode '||l_crednt_sricode, user);
+
 						if l_crednt_bnnr is null then
+
+							p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_update_secuencia: ', p_sri_doc_number||' p_doc_number:'||p_doc_number||' v_int_NC:'||v_int_NC ||' Error '||p_return||sqlerrm, user);
+
+							p_update_secuencia (p_int_SDOC_CODE,
+														NVL(p_user_id,user),
+														p_int_PREFIX_1,
+														p_int_PREFIX_2,
+														p_int_CAMP_CODE,
+														v_int_NC,
+														p_int_error_msg);
+							p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_update_secuencia: ', p_sri_doc_number||' p_doc_number:'||p_doc_number||' v_sri_NC:'||v_sri_NC ||' Error '||p_return||sqlerrm, user);
+
+							p_update_secuencia (p_sdoc_sri_nc,
+														NVL(p_user_id,user),
+														p_sri_PREFIX_1,
+														p_sri_PREFIX_2,
+														p_int_CAMP_CODE,
+														v_sri_NC,
+														p_sri_error_msg);
+
+
+
 
 							p_folio_int_nc := p_int_PREFIX_1 || p_int_PREFIX_2 || v_int_NC;
 							p_folio_sri_NC := p_sri_PREFIX_1 || '-'||p_sri_PREFIX_2 ||'-'|| lpad(v_sri_NC,9,'0');
@@ -8869,6 +9929,8 @@ WHERE
 
 							GOTO end_credit_note;
 						END IF;
+
+                        p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_folio_sri_NC bef: ', p_folio_sri_NC||' p_doc_number:'||p_doc_number||' p_pidm:'||p_pidm, user);							 
 
 						IF p_int_error_msg is null and p_sri_error_msg is null then
 
@@ -8892,7 +9954,7 @@ WHERE
 									 and TZRFACT_RECEIPT_NUM is null
 									 and TZRFACT_SRI_DOCNUM = p_sri_doc_number
 									 and TZRFACT_FACT_CANCEL_IND is null
-									 and TZRFACT_NC_CANCEL_IND is null
+                                     and TZRFACT_NC_CANCEL_IND is null
 									 and  TZRFACT_SDOC_CODE not in  (select GTVSDAX_TRANSLATION_CODE from gtvsdax where GTVSDAX_INTERNAL_CODE_GROUP = 'PUCE_FACT' and GTVSDAX_INTERNAL_CODE = 'COD_CP'
 																							union 
 																							select  GTVSDAX_CONCEPT from gtvsdax where GTVSDAX_INTERNAL_CODE_GROUP = 'PUCE_FACT' and GTVSDAX_INTERNAL_CODE = 'COD_CP')
@@ -8901,13 +9963,13 @@ WHERE
 									 where j.TZRFACT_pidm = p_pidm and  j.TZRFACT_DOC_NUMBER = p_doc_number 
 									 and j.TZRFACT_SRI_DOCNUM = p_sri_doc_number
 									 and j.TZRFACT_FACT_CANCEL_IND is null
-									 and TZRFACT_NC_CANCEL_IND is null		  
+                                     and TZRFACT_NC_CANCEL_IND is null
 									 and j.TZRFACT_SDOC_CODE = (select GTVSDAX_EXTERNAL_CODE from gtvsdax where GTVSDAX_INTERNAL_CODE_GROUP = 'PUCE_FACT' and GTVSDAX_INTERNAL_CODE = 'COD_NC'));
 
 								  standard.commit;
 
 								 p_return:= 'OK';
-                              p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_folio_sri_NC: ', p_folio_sri_NC||' p_doc_number:'||p_doc_number||' p_pidm:'||p_pidm, user);							 
+                              p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_folio_sri_NC post: ', p_folio_sri_NC||' p_doc_number:'||p_doc_number||' p_pidm:'||p_pidm, user);							 
 
 							exception when others then 
                               p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_folio_sri_NC: ', p_folio_sri_NC||' p_doc_number:'||p_doc_number||' p_pidm:'||p_pidm ||' Error '||sqlerrm, user);							 
@@ -8915,6 +9977,8 @@ WHERE
 							END; 
 
 							BEGIN
+                                p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'TZRFANC: ', 'p_doc_number '||p_doc_number, user);
+
 								insert into TZRFANC 
 								(TZRFANC_PIDM,TZRFANC_DOC_NUMBER,TZRFANC_SDOC_CODE,TZRFANC_SRI_DOCNUM,TZRFANC_DOC_NUMBER_REL,TZRFANC_SDOC_CODE_REL,TZRFANC_SRI_DOCNUM_REL,
 								TZRFANC_TERM_CODE,TZRFANC_TRAN_NUMBER,TZRFANC_DETAIL_CODE,TZRFANC_AMOUNT,TZRFANC_REASON,TZRFANC_ALL_IND,
@@ -8929,7 +9993,7 @@ WHERE
 								where TZRFACT_pidm = p_pidm
 									 and TZRFACT_DOC_NUMBER = p_doc_number
 									 and TZRFACT_RECEIPT_NUM is null
-									 and TZRFACT_NC_CANCEL_IND is null		  
+                                     and TZRFACT_NC_CANCEL_IND is null
 									 and TZRFACT_SDOC_CODE = (select GTVSDAX_EXTERNAL_CODE from gtvsdax where GTVSDAX_INTERNAL_CODE_GROUP = 'PUCE_FACT' and GTVSDAX_INTERNAL_CODE = 'COD_NC')
 									 and not exists (select 'Y' from TZRFANC  where TZRFANC_PIDM = TZRFACT_pidm and  TZRFANC_DOC_NUMBER_REL = TZRFACT_DOC_NUMBER and TZRFANC_SDOC_CODE = TZRFACT_SDOC_CODE
 										and TZRFANC_SRI_DOCNUM_REL =  TZRFACT_SRI_DOCNUM  and TZRFANC_SRI_DOCNUM =  TZRFACT_CREDNT_SRICODE and  TZRFANC_TRAN_NUMBER = TZRFACT_TRAN_NUM and TZRFANC_DOC_CANCEL_IND is null);
@@ -9019,11 +10083,13 @@ is
 	from tzrfact
 	where tzrfact_sri_docnum = p_sri_doc_number
 	and   tzrfact_trdparty_pidm = p_pidm
-	and   tzrfact_sdoc_code in ('BF','BT');
+	and   tzrfact_sdoc_code in ('BF','BT');    
 
 	begin
 		for tx_dat_e in c_dat_e
 		loop
+		p_ins_tzrrlog(0,  'NOTA_CREDITO', 'p_credit_note_e', 'tx_dat_e.tzrfact_sri_docnum '||tx_dat_e.tzrfact_sri_docnum, user);
+
 			p_credit_note (p_pidm => tx_dat_e.tzrfact_pidm, 
 							p_sri_doc_number => tx_dat_e.tzrfact_sri_docnum, 
 							p_user_id => NVL(p_user_id,user), 
@@ -9041,7 +10107,6 @@ is
 
 --exception when others then rollback;
 end p_credit_note_e;
-
 
 procedure  p_canc_credit_note (p_sri_nc_doc_number IN varchar2, p_user_id IN varchar2 default null, p_return OUT varchar2)
 is
@@ -9604,6 +10669,7 @@ values(
 p_PIDM , p_SDOC_CODE, p_DOC_NUMBER_REL,p_SDOC_CODE_REL , p_SRI_DOCNUM_REL  ,  p_TERM_CODE  ,p_TRAN_NUMBER  
 ,p_DETAIL_CODE ,p_AMOUNT ,p_REASON  ,p_ALL_IND  , p_CREATE_DATE  ,p_USER_ID  ,p_DATA_ORIGIN, sysdate  
 );
+ p_ins_tzrrlog(p_pidm,  'NOTA_CREDITO', 'p_ins_nc_split ok: ', 'p_SRI_DOCNUM_REL '||p_SRI_DOCNUM_REL||p_return, user);
 
 p_return := 'OK';                     
 
@@ -9646,6 +10712,58 @@ values
 
 end;
 
+procedure p_ins_tzfclog ( 
+ P_SDOC_CODE TZFCLOG.TZFCLOG_SDOC_CODE%TYPE,
+ P_USER TZFCLOG.TZFCLOG_USER%TYPE,
+ P_CAMP_CODE TZFCLOG.TZFCLOG_CAMP_CODE%TYPE,
+ P_PREFIX1 TZFCLOG.TZFCLOG_PREFIX1%TYPE,
+ P_PREFIX2 TZFCLOG.TZFCLOG_PREFIX2%TYPE,
+ P_NEXT_NUM_DOC TZFCLOG.TZFCLOG_NEXT_NUM_DOC%TYPE,
+ P_CAMP_DISTRICT TZFCLOG.TZFCLOG_CAMP_DISTRICT%TYPE,
+ P_SEQ TZFCLOG.TZFCLOG_SEQ%TYPE,
+ P_ERROMSG TZFCLOG.TZFCLOG_ERROMSG%TYPE,
+ P_PROCESS TZFCLOG.TZFCLOG_PROCESS%TYPE,
+ P_REFERENCE TZFCLOG.TZFCLOG_REFERENCE%TYPE,
+ P_LOG TZFCLOG.TZFCLOG_LOG%TYPE
+ )
+is
+begin
+insert into tzfclog 
+(
+ TZFCLOG_SDOC_CODE,
+ TZFCLOG_USER,
+ TZFCLOG_CAMP_CODE,
+ TZFCLOG_PREFIX1,
+ TZFCLOG_PREFIX2,
+ TZFCLOG_NEXT_NUM_DOC,
+ TZFCLOG_CAMP_DISTRICT,
+ TZFCLOG_SEQ,
+ TZFCLOG_ERROMSG,
+ TZFCLOG_PROCESS,
+ TZFCLOG_REFERENCE,
+ TZFCLOG_LOG,
+ TZFCLOG_ACTIVITY_DATE
+)
+values
+(
+ P_SDOC_CODE,
+ P_USER,
+ P_CAMP_CODE,
+ P_PREFIX1,
+ P_PREFIX2,
+ P_NEXT_NUM_DOC,
+ P_CAMP_DISTRICT,
+ P_SEQ,
+ P_ERROMSG,
+ P_PROCESS,
+ P_REFERENCE,
+ P_LOG,
+ SYSDATE
+);
+exception when others then
+     p_ins_tzrrlog(0,  'ERRORLOG', 'p_ins_tzfclog: ', ' ERRORLOG ', user);
+
+end;
 
 function f_is_comprobante (p_pay_detail_code varchar2) return varchar2
 is
@@ -10092,9 +11210,7 @@ v_trdparty_id               tzrfact.tzrfact_trdparty_id%type;
 v_trdparty_pidm          tzrfact.tzrfact_trdparty_pidm%type;
 v_trdparty_name         tzrfact.tzrfact_trdparty_name%type;
 
-
 begin
-
      OPEN c_get_sdoc_code ('COD_CP');
      FETCH c_get_sdoc_code into v_sdoc_code, v_sdoc_cuota;
      CLOSE c_get_sdoc_code;
@@ -10324,10 +11440,6 @@ p_ins_tzrrlog(p_pidm,  'COMPROBANTE', 'p_gen_comprobante_pago_caja: ', p_doc_num
    end if;
    p_return:= 'OK';
 
-   if p_program is null then
-		p_return:= ' Validar perfiles VBS. ';
-   end if;   
-
    exception when others then 
    p_return :=  p_return || SQLCODE || '--' || SUBSTR (SQLERRM, 1, 500);
    p_ins_tzrrlog(p_pidm,  'COMPROBANTE', 'p_gen_comprobante_pago_caja: ', ' Excepcion: '|| p_return, user);
@@ -10522,16 +11634,23 @@ where TBRACCD_CROSSREF_PIDM= p_pidm
 
 begin
 
+p_ins_tzrrlog(p_pidm,  'FACTURA_EMP', 'p_gen_factura_tipo 0: ', ' v_amt_contrato: '|| v_amt_contrato||' v_amt_contrato_aplicado: '|| v_amt_contrato_aplicado, user);
+
+v_count_reg := 0;
 open c_get_montos_validados;
 fetch c_get_montos_validados into v_amt_contrato,  v_amt_contrato_aplicado;
 close c_get_montos_validados;
+
+p_ins_tzrrlog(p_pidm,  'FACTURA_EMP', 'p_gen_factura_tipo: ', ' v_amt_contrato: '|| v_amt_contrato||' v_amt_contrato_aplicado: '|| v_amt_contrato_aplicado, user);
 
 if v_amt_contrato = v_amt_contrato_aplicado then 
 p_genera := 'Y';
 else
 p_genera := 'N';
 end if;
+p_ins_tzrrlog(p_pidm,  'FACTURA_EMP', 'p_gen_factura_tipo: ', ' v_amt_contrato: '|| v_amt_contrato||' v_amt_contrato_aplicado: '|| v_amt_contrato_aplicado, user);
 
+   p_ins_tzrrlog(p_pidm,  'FACTURA_EMP', 'p_gen_factura_tipo: ', ' p_genera: '|| p_genera, user);
 
 IF p_genera = 'Y' then
 
@@ -10606,6 +11725,8 @@ loop
                                                               p_errormsg        => v_error,
                                                               p_camp_district   => v_district); 
 
+                        tzkpufc.p_ins_tzfclog(p_sdoc_fact, p_user, p_campus, v_prefix_1,v_prefix_2,v_doc_num,v_district,v_seq,v_error,'GENERA_FACTURA','FACTURA_EMPRESA','v_fact_individual '||v_fact_individual);
+
                         p_folio_factura := v_prefix_1 || '-'||v_prefix_2 ||'-'|| lpad(v_doc_num,9,'0');
 
                         IF v_doc_num is not null then           
@@ -10619,7 +11740,7 @@ loop
                                     P_SECUENCIA => v_doc_num,
                                     P_ERROR => v_err_update
                                   );
-
+						p_ins_tzrrlog(p_pidm,  'FACTURA_EMP', 'p_gen_factura_tipo: ', ' P_UPDATE_SECUENCIA p_folio_factura: '|| p_folio_factura, user);
 
                         END IF; 
 
@@ -10638,6 +11759,9 @@ loop
                                                               p_camp_district   => v_district); 
 
                         p_folio_factura := v_prefix_1 || '-'||v_prefix_2 ||'-'|| lpad(v_doc_num,9,'0');
+						p_ins_tzrrlog(p_pidm,  'FACTURA_EMP', 'p_gen_factura_tipo: ', ' v_fact_individual: '|| v_fact_individual, user);
+						p_ins_tzrrlog(p_pidm,  'FACTURA_EMP', 'p_gen_factura_tipo: ', ' p_folio_factura: '|| p_folio_factura, user);
+                        tzkpufc.p_ins_tzfclog(p_sdoc_fact, p_user, p_campus, v_prefix_1,v_prefix_2,v_doc_num,v_district,v_seq,v_error,'GENERA_FACTURA','FACTURA_EMPRESA','v_fact_individual '||v_fact_individual);
 
 
                         IF v_doc_num is not null then           
@@ -10651,6 +11775,7 @@ loop
                                     P_SECUENCIA => v_doc_num,
                                     P_ERROR => v_err_update
                                   );
+						p_ins_tzrrlog(p_pidm,  'FACTURA_EMP', 'p_gen_factura_tipo: ', ' P_UPDATE_SECUENCIA p_folio_factura: '|| p_folio_factura, user);
 
 
                         END IF; 
@@ -10668,6 +11793,7 @@ loop
                                             r_pago.TBRACCD_DETAIL_CODE,r_pago.TBRACCD_AMOUNT,r_pago.TBRACCD_TRAN_NUMBER,p_folio_factura,
                                             sysdate,sysdate,p_user, p_term_code, v_empr_id, v_empr_pidm, v_empr_name, v_cnt_cstu, v_crn, v_prefact_date, sysdate, p_campus);
 
+           dbms_output.put_line('Registros actualizados: '||sql%rowcount);
            v_count_reg := sql%rowcount;
 
            exception when others then 
@@ -10703,8 +11829,8 @@ loop
 
 end loop;
 if v_count_reg > 0 then
-p_return := 'OK';
-standard.commit;
+    p_return := 'OK';    
+    standard.commit;
 else
     p_return := 'Documento no generado';    
 end if;
@@ -10894,6 +12020,7 @@ IF v_prefix_1 is not null  then
                                                               p_camp_district   => v_district); 
 
                         p_folio_factura := v_prefix_1 || '-'||v_prefix_2 ||'-'|| lpad(v_doc_num,9,'0');
+                        tzkpufc.p_ins_tzfclog(p_sdoc_fact, c_reg.TZRFACR_USER, c_reg.TZRFACR_CAMP, v_prefix_1,v_prefix_2,v_doc_num,v_district,v_seq,v_error,'GENERA_FACTURA','FACTURA_TERCEROS','c_reg.TZRFACR_TRDPARTY_PIDM '||c_reg.TZRFACR_TRDPARTY_PIDM);
 
 
                         IF v_doc_num is not null then           
@@ -11126,6 +12253,7 @@ p_ins_tzrrlog(p_pidm,  'REIMPRESION', 'FACTURA', v_sri_prefix1||' v_sri_prefix2:
 
     p_folio_factura := v_sri_prefix1 || '-'||v_sri_prefix2 ||'-'|| lpad(v_doc_num,9,'0');
     p_ins_tzrrlog(p_pidm,  'REIMPRESION', 'Factura', p_folio_factura, p_usr_reimp);
+    tzkpufc.p_ins_tzfclog(v_sdoc_fact, v_user, v_campus, v_sri_prefix1,v_sri_prefix2,v_doc_num,v_district,v_seq,v_error,'GENERA_FACTURA','REIMPRESION','');
 
     IF v_doc_num is not null then           
                                 TZKPUFC.P_UPDATE_SECUENCIA(
@@ -11539,6 +12667,7 @@ tzkpufc.p_ins_tzrrlog(p_TVRMLCB_PIDM,  'GENERA_FACTURA', 'TT_TVRMLCB', '2- emisi
 
 
      tzkpufc.p_ins_tzrrlog(p_TVRMLCB_PIDM,  'GENERA_FACTURA', 'TT_TVRMLCB', '3- Genera Folio: ' ||v_sdoc_code ||' - '|| p_campus||' - '|| v_prefix_1||' - '|| v_prefix_2||' - '|| v_doc_num||' - '|| v_error, user);
+     tzkpufc.p_ins_tzfclog(v_sdoc_code, p_TVRMLCB_USER, p_campus, v_prefix_1,v_prefix_2,v_doc_num,v_district,v_seq,v_error,'GENERA_FACTURA','TVACAJA','');
 
                         IF v_doc_num is not null then           
 
@@ -13224,6 +14353,7 @@ WHERE
 AND tzrfact_pidm     = TBRAPPL_PIDM   
 and TZRFACT_TRAN_NUM = TBRAPPL_PAY_TRAN_NUMBER   
 --and TZRFACT_INTERNAL_RECEIPT_NUM = p_INTERNAL_RECEIPT
+and TBRAPPL_CHG_TRAN_NUMBER in (SELECT TBRACCD_TRAN_NUMBER FROM TBRACCD WHERE TBRACCD_AMOUNT >=0 and tbraccd_pidm = tzrfact_pidm)
 and nvl2(p_INTERNAL_RECEIPT,TZRFACT_INTERNAL_RECEIPT_NUM,0) = nvl2(p_INTERNAL_RECEIPT,p_INTERNAL_RECEIPT,0)
 AND TZRFACT_RECEIPT_NUM = p_receipt
 AND TBRAPPL_REAPPL_IND is null
@@ -13272,6 +14402,9 @@ AND tzrfact_pidm     =  p_pidm
 AND tzrfact_pidm     = TBRAPPL_PIDM   
 and TZRFACT_TRAN_NUM = TBRAPPL_PAY_TRAN_NUMBER   
 --and TZRFACT_INTERNAL_RECEIPT_NUM =p_INTERNAL_RECEIPT
+and TBRACCD_TRAN_NUMBER = TBRAPPL_CHG_TRAN_NUMBER
+and TBRACCD_AMOUNT >=0
+--and TBRAPPL_CHG_TRAN_NUMBER in (SELECT TBRACCD_TRAN_NUMBER FROM TBRACCD WHERE TBRACCD_AMOUNT >=0 and tbraccd_pidm = tzrfact_pidm)
 and nvl2(p_INTERNAL_RECEIPT,TZRFACT_INTERNAL_RECEIPT_NUM,0) = nvl2(p_INTERNAL_RECEIPT,p_INTERNAL_RECEIPT,0)
 AND TZRFACT_RECEIPT_NUM = p_receipt
 AND TBRAPPL_REAPPL_IND is null
@@ -14148,6 +15281,7 @@ v_telefono sprtele.sprtele_phone_number%type;
    p_w => v_2_ancho,          
    p_h => v_2_alto             
    );
+    dbms_output.put_line(v_total);
 
      plpdf.setcurrentXY(v_ini_x+1,v_ini_y+2.5);
    --plpdf.PrintMultiLineCell(p_txt=>'SON:'||tzkcone.numero_nota_letra(ABS(v_total))||'/100 *',
@@ -14466,6 +15600,7 @@ IF  v_has_sri is null then
                                                               p_camp_district   => v_district); 
 
     p_ins_tzrrlog(p_pidm,  'FACTURA_CERO', 'p_get_next_folio', '03- '||'v_sdoc_code: '||v_sdoc_code||' p_campus: '||p_campus || ' v_doc_num: '||v_doc_num|| ' v_error: '||v_error, p_user);
+    tzkpufc.p_ins_tzfclog(v_sdoc_code, p_user, p_campus, v_prefix_1,v_prefix_2,v_doc_num,v_district,v_seq,v_error,'GENERA_FACTURA','FACTURA_CERO','');
 
                    IF v_doc_num is not null then           
                       p_folio_factura := v_prefix_1 || '-'||v_prefix_2 ||'-'|| lpad(v_doc_num,9,'0');
@@ -14511,6 +15646,48 @@ p_ins_tzrrlog(p_pidm,  'FACTURA_CERO', 'P_UPDATE_SECUENCIA', '04- '||'p_folio_fa
                 OPEN c_get_data_i ('PUCE_FACT', 'USR_GEN', 'EXT');
                 FETCH c_get_data_i INTO v_user_create;
                 CLOSE c_get_data_i;
+				/*BEGIN
+
+                tzkrpay.p_register_payment_bi (
+                            p_bank_code =>
+                                null,
+                            p_doc_number =>
+                                to_number(p_doc_num),
+                            p_total_amount =>
+                                '0',
+                            p_payment_date =>                       --sysdate,
+                                TO_DATE (sysdate, 'DDMMYYYY'),
+                            p_payment_hour =>
+                                null,
+                            p_pay_type =>
+                                null,
+							p_detail_code =>
+                                p_pay_detail_code,
+                            p_cash_amount =>
+                                null,
+                            p_chk_amount =>
+                                null,
+                            p_card_amount =>
+                                null,
+                            p_invoice_number =>
+                                NULL,
+                            p_status =>
+                                'ACEPTADO',
+                            p_agency_code =>
+                                null,--lv_agency_code, -- Si este campo no es nulo insertar un registro en tabla de tvacaja con el detalle del pago
+                            p_card_number =>
+                                null,
+                            p_result =>
+                                p_resultpay,
+                            p_error =>
+                                p_errorpay);
+
+				   exception when others then
+						 p_error_msg := 'Error: ' || SQLCODE || '--' || SUBSTR (SQLERRM, 1, 700);
+						 p_ins_tzrrlog(p_pidm,  'FACTURA_CERO', 'p_register_payment', SQLCODE || '-' || SUBSTR (SQLERRM, 1, 500), user);
+
+				   END;  
+				   */
 
 				begin
 					tb_receivable.p_create (
@@ -14543,8 +15720,26 @@ p_ins_tzrrlog(p_pidm,  'FACTURA_CERO', 'P_UPDATE_SECUENCIA', '04- '||'p_folio_fa
                 END;
 				BEGIN
                     UPDATE tzrdprf
-                       SET tzrdprf_total_pay_amount = 0,                         
-                           tzrdprf_card_pay_amount = null,                         
+                       SET --tzrdprf_bank_code =null,
+                           tzrdprf_total_pay_amount = 0,
+                           --tzrdprf_cash_detail_code = null,                               
+                           --tzrdprf_cash_pay_amount = 0,
+                           --tzrdprf_card_detail_code =
+                           --    DECODE (p_card_amount,
+                           --            NULL, NULL,
+                           --            lv_detail_code),
+                           tzrdprf_card_pay_amount = null,
+                           --tzrdprf_chk_detail_code =
+                           --    DECODE (p_chk_amount,
+                           --            NULL, NULL,
+                           --            lv_detail_code),
+                           --tzrdprf_chk_pay_amount = p_chk_amount,
+                           --tzrdprf_pay_method = p_pay_method,
+                           --tzrdprf_pay_type = p_pay_type,
+                           --tzrdprf_card_type = p_card_type,
+                           --tzrdprf_pay_deferred = p_pay_deferred,
+                           --tzrdprf_internal_reference = p_internal_reference,
+                           --tzrdprf_receipt_number = p_receipt_number,
                            tzrdprf_receipt_number = ln_recepit_number, -- 23SEP19 EMR
                            tzrdprf_pay_date = sysdate,
                            tzrdprf_pay_hour = null,
@@ -14633,7 +15828,6 @@ END IF;
 p_ins_tzrrlog(p_pidm,  'FACTURA_CERO', 'end_process_cero', '08- '||'Excepcion '||SQLCODE || '-' || SUBSTR (SQLERRM, 1, 500), p_user);           
 
 end p_gen_factura_cero;
-
 
 
 --  Procedimiento utilizado por el hall de pagos para auto cerrar las páginas visitadas.
@@ -15210,6 +16404,8 @@ where
                                 AND gtvsdax_internal_code =  'COD_FACT'
                                 )
 --AND    tzrfact_pidm         =  p_pidm 
+--ajuste caso 5626
+AND TZRFACT_CAMPUS = p_sede
 AND    tzrfact_sri_docnum   =  p_sri_docnum
 group by        TZRFACT_DET_CODE_DOC;
 
@@ -18084,6 +19280,7 @@ begin
                                                                           p_camp_district   => v_district); 
 
                 tzkpufc.p_ins_tzrrlog(p_pidm,  'FACTURA_DEPO', 'p_get_next_folio', '03- '||'v_sdoc_code: '||v_sdoc_code||' p_campus: '||p_campus || ' v_doc_num: '||v_doc_num|| ' v_error: '||v_error, p_user);
+                tzkpufc.p_ins_tzfclog(v_sdoc_code, p_user, p_campus, v_prefix_1,v_prefix_2,v_doc_num,v_district,v_seq,v_error,'GENERA_FACTURA','DEPOSITO','');
 
                                IF v_doc_num is not null then           
 
@@ -18793,7 +19990,6 @@ PROCEDURE p_refin_plan_pago (p_term     varchar2,
                 )
         and tzrfact_comp_cancel_ind is null;
 
-    --acastillo caso 3244 ajuste al refinanciar ultima cuota
     cursor c_docs_origen is 
         select tzrfact_pidm, tzrfact_sdoc_code, tzrfact_doc_number, tzrfact_id, tzrfact_curr_program, tzrfact_sale_docnum, TZRFACT_DET_CODE_DOC, tzrfact_amnt_trans, tzrfact_tran_num, tzrfact_sri_docnum, tzrfact_term_code, tzrfact_campus, tzrfact_internal_receipt_num, tzrfact_prefact_date, tzrfact_fact_date
         from tzrfact fact
@@ -18801,7 +19997,7 @@ PROCEDURE p_refin_plan_pago (p_term     varchar2,
         and   tzrfact_sdoc_code = 'XC'
         and   tzrfact_term_code = p_term
         fetch first 1 rows only;
-        --
+
     v_row_print         varchar2 (1000);
 	v_page_width        number;
 	v_comments          varchar2 (20000):='';
@@ -18914,6 +20110,7 @@ PROCEDURE p_refin_plan_pago (p_term     varchar2,
 
 		v_comments := '';
 		for docs_anular in c_docs_anular loop
+
 			begin
 
 			p_tran_number := docs_anular.tzrfact_tran_num;
@@ -18961,7 +20158,7 @@ PROCEDURE p_refin_plan_pago (p_term     varchar2,
 			exception when others then
 				p_error := 'ERROR';
                 p_ins_tzrrlog(docs_anular.tzrfact_pidm,  'error p_insert_tzrfact_refi', 'p_insert_tzrfact_refi', SQLCODE || '-' || SUBSTR (SQLERRM, 1, 500), user);
-      gz_report.p_put_line (p_one_up_no       => p_one_up_no,
+            gz_report.p_put_line (p_one_up_no       => p_one_up_no,
                             p_user            => USER,
                             p_job_name        => const_application_name,
                             p_file_number     => 1,  --NVL (v_file_number, 1),
@@ -18972,8 +20169,9 @@ PROCEDURE p_refin_plan_pago (p_term     varchar2,
                             p_comments        => v_comments);
 			end;
 
+
 		end loop;
-        --acastillo caso 3244 ajuste al refinanciar ultima cuota
+
  		for docs_origen in c_docs_origen loop
             v_pidm				:= gb_common.f_get_pidm(p_id);
 			v_doc_number		:= docs_origen.tzrfact_doc_number;
@@ -18983,7 +20181,6 @@ PROCEDURE p_refin_plan_pago (p_term     varchar2,
 			v_fact_date   		:= docs_origen.tzrfact_fact_date;
 			v_prefact_date		:= docs_origen.tzrfact_prefact_date;
         end loop;
-        --
         gz_report.p_put_line (p_one_up_no       => p_one_up_no,
                             p_user            => USER,
                             p_job_name        => const_application_name,
@@ -19292,6 +20489,16 @@ END tzkpufc;
 
 
 --SET DEFINE OFF;
+
+
+
+
+
+
+
+
+
+
 
 
 /
